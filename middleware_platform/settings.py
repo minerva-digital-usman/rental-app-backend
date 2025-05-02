@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-i6khrkioubhlq5x=fqcz0i7y3kowbg3_y-07ard_*5-0h0!_6='
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 STRIPE_SECRET_KEY = 'sk_test_51REXBZIpkMgm9AXd3PAkWm1K9cNMftuYBDkoPsnNorDv8hUfldb0XDE1BEoamNzUEMhGSQ22JIUerkOTKYBUyOnw00syRm0uQE'
 STRIPE_PUBLIC_KEY = 'pk_test_51REXBZIpkMgm9AXd10Wr8V2dZqE0FgNXyn8ow7KDMr2lLizFHHyKgE5mUab5QBx9zTfb40Kd1vczMZKpb7gdvCTw003jH7RCPY'
 STRIPE_WEBHOOK_SECRET = 'whsec_Xj3zKkb5RYiC0eAtz182nHuhP4nKl63Y'
