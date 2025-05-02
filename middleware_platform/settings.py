@@ -31,9 +31,19 @@ BASE_URL_FRONTEND = "http://localhost:5173"
 BASE_URL_BACKEND = "http://127.0.0.1:8000"
 
 # ALLOWED_HOSTS = []
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app']
+# ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app', ]
 
-
+ALLOWED_HOSTS = [
+    "mdlabs.it",
+    "www.mdlabs.it",
+    "127.0.0.1",
+    "localhost",
+    "127.0.0.1",
+    ".mdlabs.it"
+    "api.mdlabs.it",
+    "rental.mdlabs.it",
+    "a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app"
+]
 
 # Application definition
 
