@@ -1,0 +1,14 @@
+{% extends "admin/login.html" %}
+
+{% block content %}
+    {{ block.super }}
+    <style>
+        /* Hide Django's default password reset link (if present) */
+        .password-reset-link { display: none; }
+    </style>
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="{% url 'admin_password_reset' %}" style="color: #417690; text-decoration: underline;">
+            Forgot password?
+        </a>
+    </div>
+{% endblock %}
