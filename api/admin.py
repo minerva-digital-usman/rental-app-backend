@@ -92,14 +92,20 @@ class RentalCompanyAdmin(admin.ModelAdmin):
         return not RentalCompany.objects.exists()
 
 class CarAdmin(admin.ModelAdmin):
-    list_display = ('model', 'plate_number' , 'status', 'price_per_hour', 'max_price_per_day')
+    list_display = ('model', 'plate_number', 'status', 'price_per_hour', 'max_price_per_day')
     list_filter = ('status', 'model')
     search_fields = ('model', 'plate_number')
 
     def save_model(self, request, obj, form, change):
-        if not change and Car.objects.filter(hotel=obj.hotel).count() >= 2:
-            messages.warning(request, "This hotel already has 2 vehicles.")
-            return
+        # Assume the hotel is being passed in form.cleaned_data via a custom field
+        hotel = form.cleaned_data.get('hotel')  # You must ensure this field is in the form
+
+        if not change and hotel:
+            linked_cars = CarHotelLink.objects.filter(hotel=hotel).count()
+            if linked_cars >= 2:
+                messages.warning(request, "This hotel already has 2 vehicles.")
+                return
+
         super().save_model(request, obj, form, change)
 
 class GuestAdmin(admin.ModelAdmin):
