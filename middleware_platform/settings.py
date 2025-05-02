@@ -76,20 +76,21 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# CORS_ALLOW_ALL_ORIGINS = True  # ⚠️ Dev only. Use whitelist in production.
+CORS_ALLOW_ALL_ORIGINS = True  # ⚠️ Dev only. Use whitelist in production.
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://rental.mdlabs.it",
-    "https://www.rental.mdlabs.it",
-    "http://rental.mdlabs.it",
-    "http://www.rental.mdlabs.it",
-    "http://127.0.0.1:8000",
-    "http://localhost:5173",
-    "http://159.223.221.86:5173",
-    "http://159.223.221.86:8000",
-    "http://159.223.221.86",
-    "https://api.mdlabs.it"
-    ]
+# CSRF_TRUSTED_ORIGINS = [
+#     "https://rental.mdlabs.it",
+#     "https://rental.mdlabs.it",
+#     "https://www.rental.mdlabs.it",
+#     "http://rental.mdlabs.it",
+#     "http://www.rental.mdlabs.it",
+#     "http://127.0.0.1:8000",
+#     "http://localhost:5173",
+#     "http://159.223.221.86:5173",
+#     "http://159.223.221.86:8000",
+#     "http://159.223.221.86",
+#     "https://api.mdlabs.it"
+#     ]
 
 JAZZMIN_SETTINGS = {
     "site_title": "Rental Platform Admin",
