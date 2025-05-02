@@ -27,23 +27,25 @@ DEBUG = False
 STRIPE_SECRET_KEY = 'sk_test_51REXBZIpkMgm9AXd3PAkWm1K9cNMftuYBDkoPsnNorDv8hUfldb0XDE1BEoamNzUEMhGSQ22JIUerkOTKYBUyOnw00syRm0uQE'
 STRIPE_PUBLIC_KEY = 'pk_test_51REXBZIpkMgm9AXd10Wr8V2dZqE0FgNXyn8ow7KDMr2lLizFHHyKgE5mUab5QBx9zTfb40Kd1vczMZKpb7gdvCTw003jH7RCPY'
 STRIPE_WEBHOOK_SECRET = 'whsec_Xj3zKkb5RYiC0eAtz182nHuhP4nKl63Y'
-BASE_URL_FRONTEND = "http://192.168.10.104:5173"
-BASE_URL_BACKEND = "http://127.0.0.1:8000"
+BASE_URL_FRONTEND = "https://rental.mdlabs.it"
+BASE_URL_BACKEND = "https://api.mdlabs.it"
 
-ALLOWED_HOSTS = ['*']
+# ALLOWED_HOSTS = ['*']
 # ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app', ]
 
-# ALLOWED_HOSTS = [
-#     "mdlabs.it",
-#     "www.mdlabs.it",
-#     "127.0.0.1",
-#     "localhost",
-#     "127.0.0.1",
-#     ".mdlabs.it"
-#     "api.mdlabs.it",
-#     "rental.mdlabs.it",
-#     "a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app"
-# ]
+ALLOWED_HOSTS = [
+    "mdlabs.it",
+    "www.mdlabs.it",
+    "127.0.0.1:8000",
+    "localhost:5173",
+    "127.0.0.1",
+    "159.223.221.86:8000",
+    "159.223.221.86:5173",
+    "api.mdlabs.it",
+    "159.223.221.86",
+    "rental.mdlabs.it",
+    "a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app"
+]
 
 # Application definition
 
@@ -74,7 +76,20 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True  # ⚠️ Dev only. Use whitelist in production.
+# CORS_ALLOW_ALL_ORIGINS = True  # ⚠️ Dev only. Use whitelist in production.
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://rental.mdlabs.it",
+    "https://www.rental.mdlabs.it",
+    "http://rental.mdlabs.it",
+    "http://www.rental.mdlabs.it",
+    "http://127.0.0.1:8000",
+    "http://localhost:5173",
+    "http://159.223.221.86:5173",
+    "http://159.223.221.86:8000",
+    "http://159.223.221.86",
+    "https://api.mdlabs.it"
+    ]
 
 JAZZMIN_SETTINGS = {
     "site_title": "Rental Platform Admin",
