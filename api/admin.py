@@ -109,8 +109,40 @@ class CarAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 class GuestAdmin(admin.ModelAdmin):
-    list_display = ('first_name', 'last_name', 'email', 'phone', 'fiscal_code')
+    list_display = ('first_name', 'last_name', 'email', 'phone', 'fiscal_code', 'driver_license_image')
     search_fields = ('first_name', 'last_name', 'email','fiscal_code')
+    
+    def driver_license_image(self, obj):
+        if obj.driver_license:
+            return format_html(
+                '''
+                <div style="position: relative; display: inline-block;">
+                    <img src="{}" width="100" height="100" style="display: block;" />
+                    <a href="{}" download style="
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0, 0, 0, 0.5);
+                        color: white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        text-decoration: none;
+                        opacity: 0;
+                        transition: opacity 0.3s;
+                    " onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                        ⬇ Download
+                    </a>
+                </div>
+                ''',
+                obj.driver_license,
+                obj.driver_license
+            )
+        return "No Image"
+
+
 
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
@@ -164,9 +196,31 @@ class HotelAdmin(admin.ModelAdmin):
     
     def qr_code_preview(self, obj):
         if obj.qr_code:
-            return format_html('<img src="{}" width="100" height="100" />', obj.qr_code.url)
+            return format_html('''
+                <div style="position: relative; display: inline-block;">
+                    <img src="{}" width="100" height="100" style="display: block;" />
+                    <a href="{}" download style="
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0, 0, 0, 0.5);
+                        color: white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        text-decoration: none;
+                        opacity: 0;
+                        transition: opacity 0.3s;
+                    " onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                        ⬇ Download
+                    </a>
+                </div>
+            ''', obj.qr_code.url, obj.qr_code.url)
         return "-"
-    qr_code_preview.short_description = 'QR Code Preview'
+    qr_code_preview.short_description = 'QR Code'
+
     
     def total_earnings(self, obj):
         # Aggregate payments based on the hotel ID
@@ -185,18 +239,40 @@ class CarHotelLinkAdmin(admin.ModelAdmin):
     list_display = ('car_link', 'hotel_link', 'qr_code_image')
     
     def car_link(self, obj):
-        return format_html("<a href='/admin/car/{}/'>{}</a>", obj.car.id, obj.car)
+        return format_html("<a href='/admin/api/car/{}/'>{}</a>", obj.car.id, obj.car)
     car_link.short_description = 'Car'
     
     def hotel_link(self, obj):
-        return format_html("<a href='/admin/hotel/{}/'>{}</a>", obj.hotel.id, obj.hotel)
+        return format_html("<a href='/admin/api/hotel/{}/'>{}</a>", obj.hotel.id, obj.hotel)
     hotel_link.short_description = 'Hotel'
     
     def qr_code_image(self, obj):
         if obj.qr_code:
-            return format_html('<img src="{}" style="height:100px;"/>', obj.qr_code.url)
+            return format_html('''
+                <div style="position: relative; display: inline-block;">
+                    <img src="{}" style="height: 100px; display: block;" />
+                    <a href="{}" download style="
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0, 0, 0, 0.5);
+                        color: white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        text-decoration: none;
+                        opacity: 0;
+                        transition: opacity 0.3s;
+                    " onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                        ⬇ Download
+                    </a>
+                </div>
+            ''', obj.qr_code.url, obj.qr_code.url)
         return "-"
     qr_code_image.short_description = "QR Code"
+
 
 # --- Registration ---
 # Unregister default Group model

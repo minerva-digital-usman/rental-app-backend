@@ -1,4 +1,5 @@
 import json
+import os
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, JsonResponse
 import requests
@@ -33,6 +34,7 @@ def create_checkout_session(request):
                 f"Name: {data['guest_first_name']} {data['guest_last_name']}, "
                 f"Pickup: {data['pickup_date']} {data['pickup_time']}, "
                 f"Return: {data['return_date']} {data['return_time']}"
+                f"url:  {data['guest_driver_license']}"
             )
 
             session = stripe.checkout.Session.create(
@@ -60,6 +62,7 @@ def create_checkout_session(request):
                     'guest_email': data['guest_email'],
                     'guest_phone': data['guest_phone'],
                     'guest_fiscal_code': data['guest_fiscal_code'],
+                    'guest_driver_license' : data['guest_driver_license'],
                     'pickup_date': data['pickup_date'],
                     'pickup_time': data['pickup_time'],
                     'return_date': data['return_date'],
@@ -282,8 +285,32 @@ def stripe_webhook(request):
 
 # Helper functions for each payment type
 
+import os
+import uuid
+import requests
+import stripe
+
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from django.conf import settings
+
+
 def handle_initial_booking_payment(session, metadata):
     """Process initial booking payment after successful checkout"""
+
+    # ✅ Move driver license image from temp to permanent folder
+    if 'guest_driver_license' in metadata:
+        temp_path = metadata['guest_driver_license'].replace(settings.MEDIA_URL, '')
+        if default_storage.exists(temp_path):
+            ext = os.path.splitext(temp_path)[-1]
+            new_filename = f"driver_licenses/{uuid.uuid4()}{ext}"
+            file_content = default_storage.open(temp_path).read()
+            default_storage.save(new_filename, ContentFile(file_content))
+            default_storage.delete(temp_path)
+            # ✅ Update metadata with new permanent URL
+            metadata['guest_driver_license'] = default_storage.url(new_filename)
+
+    # ✅ Build booking data using updated metadata
     start_time = f"{metadata['pickup_date']} {metadata['pickup_time']}:00"
     end_time = f"{metadata['return_date']} {metadata['return_time']}:00"
 
@@ -298,6 +325,7 @@ def handle_initial_booking_payment(session, metadata):
             "email": metadata['guest_email'],
             "phone": metadata['guest_phone'],
             "fiscal_code": metadata['guest_fiscal_code'],
+            "driver_license": metadata['guest_driver_license']
         }
     }
 
@@ -326,7 +354,7 @@ def handle_initial_booking_payment(session, metadata):
         payment_intent = stripe.PaymentIntent.retrieve(session.payment_intent)
         if payment_intent.payment_method:
             payment_method = stripe.PaymentMethod.retrieve(payment_intent.payment_method)
-            
+
             # 4. Save the payment method for future use
             CustomerPaymentMethod.objects.create(
                 booking=booking,
@@ -335,17 +363,18 @@ def handle_initial_booking_payment(session, metadata):
                 card_last4=payment_method.card.last4,
                 is_default=True
             )
-            
-            # Update payment record with payment method info
+
+            # 5. Update payment with method info
             payment.stripe_payment_method_id = payment_method.id
             payment.save()
 
-        # 5. Send confirmation email
+        # 6. Send confirmation email
         send_booking_confirmation(metadata)
-        
+
     except Exception as e:
         print(f"Booking creation failed: {e}")
         raise
+
 
 def handle_extension_payment(session, metadata):
     """Process booking extension payment after successful checkout"""
@@ -489,6 +518,7 @@ def handle_off_session_fine_payment(payment_intent, metadata):
         print(f"Error processing off-session fine payment for booking {booking_id}: {e}")
         raise
 
+
 def handle_failed_fine_payment(payment_intent, metadata):
     """Handle failed fine payment attempt using saved card"""
     booking_id = metadata['booking_id']
@@ -496,7 +526,17 @@ def handle_failed_fine_payment(payment_intent, metadata):
     
     try:
         booking = Booking.objects.get(id=booking_id)
-        
+        guest = booking.guest  # assuming booking.guest exists
+
+        # Delete the driver's license image file (if stored locally)
+        if guest.driver_license:
+            file_path = os.path.join(settings.MEDIA_ROOT, guest.driver_license)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                print(f"Deleted driver's license image: {file_path}")
+            guest.driver_license = ""  # Clear the driver's license field
+            guest.save()
+
         # Log the failed payment attempt
         Payment.objects.create(
             booking=booking,

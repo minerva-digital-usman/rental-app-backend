@@ -1,3 +1,5 @@
+
+
 """
 Django settings for middleware_platform project.
 

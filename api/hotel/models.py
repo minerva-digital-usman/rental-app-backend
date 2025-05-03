@@ -31,7 +31,7 @@ class Hotel(models.Model):
         blank=True,
         help_text="URL encoded in hotel QR code to access car rental booking page"
     )
-    qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
+    qr_code = models.ImageField(upload_to='hotel_qr_codes/', blank=True, null=True)
 
     def generate_guest_booking_url(self):
         """

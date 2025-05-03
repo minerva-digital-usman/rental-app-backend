@@ -2,8 +2,8 @@ from rest_framework import serializers
 from api.guest.models import Guest
 
 class GuestSerializer(serializers.ModelSerializer):
-    id = serializers.UUIDField(read_only=True)  # Include UUID field
-    # driver_license = serializers.ImageField()  # Ensure the driver license is an ImageField
+    id = serializers.UUIDField(read_only=True)
+ 
 
     class Meta:
         model = Guest
@@ -14,4 +14,5 @@ class GuestSerializer(serializers.ModelSerializer):
             'email',
             'phone',
             'fiscal_code',
+            'driver_license',
         ]
