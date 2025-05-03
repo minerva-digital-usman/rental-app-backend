@@ -92,7 +92,7 @@ class RentalCompanyAdmin(admin.ModelAdmin):
         return not RentalCompany.objects.exists()
 
 class CarAdmin(admin.ModelAdmin):
-    list_display = ('model', 'plate_number', 'status', 'price_per_hour', 'max_price_per_day')
+    list_display = ( 'plate_number', 'status', 'price_per_hour', 'max_price_per_day')
     list_filter = ('status', 'model')
     search_fields = ('model', 'plate_number')
 
