@@ -1,7 +1,6 @@
 # api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from api.vehicle.views import VehicleViewSet
 from api.rental_company.views import RentalCompanyViewSet
 from api.booking.views import BookingViewSet, ExtendBookingView
 from api.guest.views import GuestViewSet

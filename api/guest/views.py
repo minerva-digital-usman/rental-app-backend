@@ -7,7 +7,7 @@ from api.guest.serializers import GuestSerializer
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from rest_framework.response import Response
+
 
 from api.guest.utils import is_driver_license_easyocr
 

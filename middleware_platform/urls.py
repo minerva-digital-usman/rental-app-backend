@@ -7,7 +7,6 @@ from django.contrib.auth import views as auth_views
 from api.booking.views import ExtendBookingView
 from api.guest.views import  upload_driver_license_temp
 from auth.forms import StrictAdminPasswordResetForm
-from payments import views
 
 
 urlpatterns = [

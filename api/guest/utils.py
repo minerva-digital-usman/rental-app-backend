@@ -4,12 +4,8 @@ import easyocr
 from PIL import Image
 import numpy as np
 from datetime import datetime
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
-from io import BytesIO
-import uuid
+
+
 
 
 # Create the EasyOCR reader (reuse it for performance)
