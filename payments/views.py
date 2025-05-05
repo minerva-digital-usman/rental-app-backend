@@ -308,7 +308,9 @@ def handle_initial_booking_payment(session, metadata):
             default_storage.save(new_filename, ContentFile(file_content))
             default_storage.delete(temp_path)
             # ✅ Update metadata with new permanent URL
-            metadata['guest_driver_license'] = default_storage.url(new_filename)
+            # metadata['guest_driver_license'] = default_storage.url(new_filename)
+            metadata['guest_driver_license'] = new_filename
+
 
     # ✅ Build booking data using updated metadata
     start_time = f"{metadata['pickup_date']} {metadata['pickup_time']}:00"

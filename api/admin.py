@@ -114,6 +114,9 @@ class GuestAdmin(admin.ModelAdmin):
     
     def driver_license_image(self, obj):
         if obj.driver_license:
+            # Construct the full URL if needed, ensuring the /media/ part is included
+            full_url = obj.driver_license if obj.driver_license.startswith('/media/') else f"/media/{obj.driver_license}"
+
             return format_html(
                 '''
                 <div style="position: relative; display: inline-block;">
@@ -137,10 +140,11 @@ class GuestAdmin(admin.ModelAdmin):
                     </a>
                 </div>
                 ''',
-                obj.driver_license,
-                obj.driver_license
+                full_url,
+                full_url
             )
         return "No Image"
+
 
 
 

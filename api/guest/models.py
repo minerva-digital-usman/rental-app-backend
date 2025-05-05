@@ -37,4 +37,8 @@ def delete_driver_license_file(sender, instance, **kwargs):
     if instance.driver_license:
         file_path = os.path.join(settings.MEDIA_ROOT, instance.driver_license)
         if os.path.isfile(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+                print(f"Deleted license image: {file_path}")
+            except Exception as e:
+                print(f"Error deleting license image: {e}")
