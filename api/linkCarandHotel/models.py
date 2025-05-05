@@ -1,10 +1,13 @@
 from django.db import models
 import uuid
 from django.core.exceptions import ValidationError
+from django.dispatch import receiver
+from django.db.models.signals import post_delete, pre_delete
 from api.rental_company.models import RentalCompany
 from api.hotel.models import Hotel
 from api.garage.models import Car
 from io import BytesIO
+
 import os
 import qrcode
 from django.core.files.base import ContentFile
@@ -79,12 +82,16 @@ class CarHotelLink(models.Model):
             self.generate_qr_code()
             super().save(update_fields=['qr_code'])
     
-    def delete(self, *args, **kwargs):
-        """Delete the QR code file when the link is deleted."""
-        if self.qr_code:
-            if os.path.isfile(self.qr_code.path):
-                os.remove(self.qr_code.path)
-        super().delete(*args, **kwargs)
+    @receiver(pre_delete, sender='api.CarHotelLink')  # Replace with actual app label
+    def delete_qr_code(sender, instance, **kwargs):
+        if instance.qr_code:
+            try:
+                file_path = instance.qr_code.path
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"QR code for CarHotelLink {instance.id} deleted from storage.")
+            except Exception as e:
+                print(f"Error deleting QR code file: {e}")
     
     def __str__(self):
         return f"Car {self.car} linked to Hotel {self.hotel}"
