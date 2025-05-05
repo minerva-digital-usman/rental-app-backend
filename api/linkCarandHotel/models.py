@@ -82,7 +82,7 @@ class CarHotelLink(models.Model):
             self.generate_qr_code()
             super().save(update_fields=['qr_code'])
     
-    @receiver(pre_delete, sender='api.CarHotelLink')  # Replace with actual app label
+    @receiver(post_delete, sender='api.CarHotelLink')  # Replace with actual app label
     def delete_qr_code(sender, instance, **kwargs):
         if instance.qr_code:
             try:
