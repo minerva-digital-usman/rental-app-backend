@@ -1,3 +1,4 @@
+from datetime import timezone
 import json
 import os
 from django.views.decorators.csrf import csrf_exempt
@@ -5,14 +6,18 @@ from django.http import HttpResponse, JsonResponse
 import requests
 import stripe
 from django.core.mail import send_mail
-
+import uuid
+import requests
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.conf import settings
+import stripe
 from api.booking.models import Booking
-from payments.models import CustomerPaymentMethod, Payment
+from payments.models import Payment
 from middleware_platform import settings
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET = settings.STRIPE_WEBHOOK_SECRET
-
 
 @csrf_exempt
 def create_checkout_session(request):
@@ -34,8 +39,23 @@ def create_checkout_session(request):
                 f"Name: {data['guest_first_name']} {data['guest_last_name']}, "
                 f"Pickup: {data['pickup_date']} {data['pickup_time']}, "
                 f"Return: {data['return_date']} {data['return_time']}"
-                f"url:  {data['guest_driver_license']}"
             )
+
+            # Create or retrieve customer
+            customer_email = data['guest_email']
+            customer = stripe.Customer.list(email=customer_email).data
+            
+            if customer:
+                customer = customer[0]  # Use existing customer
+            else:
+                customer = stripe.Customer.create(
+                    email=customer_email,
+                    name=f"{data['guest_first_name']} {data['guest_last_name']}",
+                    phone=data['guest_phone'],
+                    metadata={
+                        'fiscal_code': data['guest_fiscal_code']
+                    }
+                )
 
             session = stripe.checkout.Session.create(
                 payment_method_types=['card'],
@@ -53,7 +73,10 @@ def create_checkout_session(request):
                 mode='payment',
                 success_url=f'{settings.BASE_URL_FRONTEND}/booking-success?session_id={{CHECKOUT_SESSION_ID}}',
                 cancel_url=f'{settings.BASE_URL_FRONTEND}/cancel',
-                customer_email=data['guest_email'],
+                customer=customer.id,
+                payment_intent_data={
+                    'setup_future_usage': 'off_session',  # This is the correct way to set it
+                },
                 metadata={
                     'hotel_id': data['hotel_id'],
                     'vehicle_id': data['vehicle_id'],
@@ -62,7 +85,7 @@ def create_checkout_session(request):
                     'guest_email': data['guest_email'],
                     'guest_phone': data['guest_phone'],
                     'guest_fiscal_code': data['guest_fiscal_code'],
-                    'guest_driver_license' : data['guest_driver_license'],
+                    'guest_driver_license': data['guest_driver_license'],
                     'pickup_date': data['pickup_date'],
                     'pickup_time': data['pickup_time'],
                     'return_date': data['return_date'],
@@ -74,7 +97,6 @@ def create_checkout_session(request):
         except Exception as e:
             print("Stripe error:", str(e))
             return JsonResponse({'error': str(e)}, status=500)
-
 
 @csrf_exempt
 def create_extension_checkout_session(request):
@@ -98,6 +120,13 @@ def create_extension_checkout_session(request):
                 f"New Return: {data['return_date']} {data['return_time']}"
             )
 
+            # Get the booking to retrieve the customer ID
+            try:
+                booking = Booking.objects.get(id=data['booking_id'])
+                customer_id = booking.stripe_customer_id
+            except Booking.DoesNotExist:
+                customer_id = None
+
             session = stripe.checkout.Session.create(
                 payment_method_types=['card'],
                 line_items=[{
@@ -114,7 +143,8 @@ def create_extension_checkout_session(request):
                 mode='payment',
                 success_url=f'{settings.BASE_URL_FRONTEND}/booking-extended?session_id={{CHECKOUT_SESSION_ID}}',
                 cancel_url=f'{settings.BASE_URL_FRONTEND}/cancel',
-                customer_email=data['guest_email'],
+                customer=customer_id if customer_id else None,
+                customer_email=data['guest_email'] if not customer_id else None,
                 metadata={
                     'booking_id': str(data['booking_id']),
                     'hotel_id': data['hotel_id'],
@@ -138,62 +168,6 @@ def create_extension_checkout_session(request):
 
 
 @csrf_exempt
-def create_fine_checkout_session(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            required_fields = [
-                'booking_id', 'amount', 'reason', 
-                'fine_details', 'guest_email'
-            ]
-            for field in required_fields:
-                if field not in data:
-                    return JsonResponse({'error': f'Missing required field: {field}'}, status=400)
-
-            # Get booking details
-            try:
-                booking = Booking.objects.get(id=data['booking_id'])
-            except Booking.DoesNotExist:
-                return JsonResponse({'error': 'Booking not found'}, status=404)
-
-            unit_amount = int(float(data['amount']) * 100)
-            description = (
-                f"Traffic fine for Booking ID: {data['booking_id']}\n"
-                f"Reason: {data['reason']}\n"
-                f"Details: {data['fine_details']}"
-            )
-
-            session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[{
-                    'price_data': {
-                        'currency': 'eur',
-                        'product_data': {
-                            'name': 'Traffic Fine',
-                            'description': description,
-                        },
-                        'unit_amount': unit_amount,
-                    },
-                    'quantity': 1,
-                }],
-                mode='payment',
-                success_url=f'{settings.BASE_URL_FRONTEND}/fine-paid?session_id={{CHECKOUT_SESSION_ID}}',
-                cancel_url=f'{settings.BASE_URL_FRONTEND}/fine-cancel',
-                customer_email=data['guest_email'],
-                metadata={
-                    'booking_id': str(data['booking_id']),
-                    'amount': data['amount'],
-                    'reason': data['reason'],
-                    'fine_details': data['fine_details'],
-                    'payment_type': 'fine'
-                }
-            )
-            return JsonResponse({'id': session.id})
-        except Exception as e:
-            print("Stripe error:", str(e))
-            return JsonResponse({'error': str(e)}, status=500)
-
-@csrf_exempt
 def stripe_webhook(request):
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
@@ -204,101 +178,34 @@ def stripe_webhook(request):
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
     except ValueError as e:
-        # Invalid payload
         print(f"⚠️  Webhook error while parsing basic request. {str(e)}")
         return HttpResponse(status=400)
     except stripe.error.SignatureVerificationError as e:
-        # Invalid signature
         print(f"⚠️  Webhook signature verification failed. {str(e)}")
         return HttpResponse(status=400)
     except Exception as e:
         print(f"⚠️  Webhook error. {str(e)}")
         return HttpResponse(status=400)
 
-    # Handle the event
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         metadata = session.get('metadata', {})
         
         try:
             if 'booking_id' in metadata:
-                # Handle extension payment
                 handle_extension_payment(session, metadata)
-            elif 'payment_type' in metadata and metadata['payment_type'] == 'fine':
-                # Handle fine payment through checkout
-                handle_fine_payment(session, metadata)
             else:
-                # Handle initial booking payment
                 handle_initial_booking_payment(session, metadata)
         except Exception as e:
             print(f"⚠️  Error processing checkout.session.completed: {str(e)}")
             return HttpResponse(status=500)
 
-    elif event['type'] == 'setup_intent.succeeded':
-        setup_intent = event['data']['object']
-        metadata = setup_intent.get('metadata', {})
-        
-        try:
-            if 'booking_id' in metadata and setup_intent.payment_method:
-                handle_saved_payment_method(setup_intent, metadata)
-        except Exception as e:
-            print(f"⚠️  Error processing setup_intent.succeeded: {str(e)}")
-            return HttpResponse(status=500)
-
-    elif event['type'] == 'payment_intent.succeeded':
-        payment_intent = event['data']['object']
-        metadata = payment_intent.get('metadata', {})
-        
-        try:
-            if 'payment_type' in metadata:
-                if metadata['payment_type'] == 'fine':
-                    handle_off_session_fine_payment(payment_intent, metadata)
-        except Exception as e:
-            print(f"⚠️  Error processing payment_intent.succeeded: {str(e)}")
-            return HttpResponse(status=500)
-
-    elif event['type'] == 'payment_intent.payment_failed':
-        payment_intent = event['data']['object']
-        metadata = payment_intent.get('metadata', {})
-        
-        try:
-            if 'payment_type' in metadata and metadata['payment_type'] == 'fine':
-                handle_failed_fine_payment(payment_intent, metadata)
-        except Exception as e:
-            print(f"⚠️  Error processing payment_intent.payment_failed: {str(e)}")
-            return HttpResponse(status=500)
-
-    elif event['type'] == 'charge.succeeded':
-        charge = event['data']['object']
-        # You might want to log successful charges here
-
-    elif event['type'] == 'charge.failed':
-        charge = event['data']['object']
-        # Handle failed charges here
-
-    else:
-        # Unexpected event type
-        print(f"Unhandled event type {event['type']}")
-
     return HttpResponse(status=200)
-
-
-# Helper functions for each payment type
-
-import os
-import uuid
-import requests
-import stripe
-
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
-from django.conf import settings
 
 
 def handle_initial_booking_payment(session, metadata):
     """Process initial booking payment after successful checkout"""
-
-    # ✅ Move driver license image from temp to permanent folder
+    # Move driver license image from temp to permanent folder
     if 'guest_driver_license' in metadata:
         temp_path = metadata['guest_driver_license'].replace(settings.MEDIA_URL, '')
         if default_storage.exists(temp_path):
@@ -307,12 +214,9 @@ def handle_initial_booking_payment(session, metadata):
             file_content = default_storage.open(temp_path).read()
             default_storage.save(new_filename, ContentFile(file_content))
             default_storage.delete(temp_path)
-            # ✅ Update metadata with new permanent URL
-            # metadata['guest_driver_license'] = default_storage.url(new_filename)
             metadata['guest_driver_license'] = new_filename
 
-
-    # ✅ Build booking data using updated metadata
+    # Build booking data
     start_time = f"{metadata['pickup_date']} {metadata['pickup_time']}:00"
     end_time = f"{metadata['return_date']} {metadata['return_time']}:00"
 
@@ -342,35 +246,49 @@ def handle_initial_booking_payment(session, metadata):
         booking_id = response.json()['id']
         booking = Booking.objects.get(id=booking_id)
         metadata['booking_id'] = booking_id
-
-        # 2. Create payment record
-        payment = Payment.objects.create(
-            booking=booking,
-            stripe_session_id=session['id'],
-            amount=float(metadata['amount']),
-            status='succeeded',
-            payment_type='initial'
-        )
-
-        # 3. Retrieve the payment method used in this session
-        payment_intent = stripe.PaymentIntent.retrieve(session.payment_intent)
-        if payment_intent.payment_method:
-            payment_method = stripe.PaymentMethod.retrieve(payment_intent.payment_method)
-
-            # 4. Save the payment method for future use
-            CustomerPaymentMethod.objects.create(
+        
+        # Save Stripe customer ID to the booking
+        # Check if the customer ID exists in the session
+        if session.get('customer'):
+            # 1. Create payment record with stripe customer ID
+            payment = Payment.objects.create(
                 booking=booking,
-                stripe_payment_method_id=payment_method.id,
-                card_brand=payment_method.card.brand,
-                card_last4=payment_method.card.last4,
-                is_default=True
+                stripe_session_id=session['id'],
+                stripe_customer_id=session['customer'],  # Storing the customer ID here
+                amount=float(metadata['amount']),
+                status='succeeded',
+                payment_type='initial'
             )
+            print(f"Successfully saved Stripe Customer ID: {session['customer']} for payment {payment.id}")
+        else:
+            print("Warning: No customer ID found in session")
 
-            # 5. Update payment with method info
+
+        # 3. Check if the session has a SetupIntent or PaymentIntent
+        if session.get('setup_intent'):
+            setup_intent = stripe.SetupIntent.retrieve(session['setup_intent'])
+            payment.stripe_setup_intent_id = setup_intent.id
+            payment_intent = None
+        else:
+            payment_intent = stripe.PaymentIntent.retrieve(session['payment_intent'])
+            payment.stripe_payment_intent_id = payment_intent.id
+            setup_intent = None
+
+        # 4. If we have a PaymentMethod, process it
+        payment_method = None
+        if (payment_intent and payment_intent.payment_method) or (setup_intent and setup_intent.payment_method):
+            payment_method_id = payment_intent.payment_method if payment_intent else setup_intent.payment_method
+            payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+            
             payment.stripe_payment_method_id = payment_method.id
-            payment.save()
+            payment.payment_method_type = payment_method.type
+            if payment_method.type == 'card':
+                payment.payment_method_brand = payment_method.card.brand
+                payment.payment_method_last4 = payment_method.card.last4
 
-        # 6. Send confirmation email
+        payment.save()
+
+        # 5. Send confirmation email
         send_booking_confirmation(metadata)
 
     except Exception as e:
@@ -406,27 +324,19 @@ def handle_extension_payment(session, metadata):
         )
 
         # 3. Retrieve and save the payment method if a new card was used
-        payment_intent = stripe.PaymentIntent.retrieve(session.payment_intent)
-        if payment_intent.payment_method:
-            payment_method = stripe.PaymentMethod.retrieve(payment_intent.payment_method)
+        if session.payment_intent:
+            payment_intent = stripe.PaymentIntent.retrieve(session.payment_intent)
+            payment.stripe_payment_intent_id = payment_intent.id
             
-            # Check if this payment method is already saved
-            if not CustomerPaymentMethod.objects.filter(
-                booking=booking,
-                stripe_payment_method_id=payment_method.id
-            ).exists():
-                # Save the new payment method
-                CustomerPaymentMethod.objects.create(
-                    booking=booking,
-                    stripe_payment_method_id=payment_method.id,
-                    card_brand=payment_method.card.brand,
-                    card_last4=payment_method.card.last4,
-                    is_default=True  # Set as default for future payments
-                )
-            
-            # Update payment record with payment method info
-            payment.stripe_payment_method_id = payment_method.id
-            payment.save()
+            if payment_intent.payment_method:
+                payment_method = stripe.PaymentMethod.retrieve(payment_intent.payment_method)
+                payment.stripe_payment_method_id = payment_method.id
+                payment.payment_method_type = payment_method.type
+                if payment_method.type == 'card':
+                    payment.payment_method_brand = payment_method.card.brand
+                    payment.payment_method_last4 = payment_method.card.last4
+
+        payment.save()
 
         # 4. Send extension confirmation email
         send_extension_confirmation(booking, metadata)
@@ -435,133 +345,160 @@ def handle_extension_payment(session, metadata):
         print(f"Error processing extension for booking {booking_id}: {e}")
         raise
 
-def handle_fine_payment(session, metadata):
-    """Process fine payment after successful checkout"""
-    booking_id = metadata['booking_id']
+@csrf_exempt
+def charge_fine(request, booking_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
     
     try:
-        booking = Booking.objects.get(id=booking_id)
+        data = json.loads(request.body)
+        amount = data.get('amount')
+        reason = data.get('reason', 'Traffic fine')
         
-        Payment.objects.create(
-            booking=booking,
-            stripe_session_id=session['id'],
-            amount=float(metadata['amount']),
-            status='succeeded',
-            payment_type='fine',
-            fine_reason=metadata.get('reason'),
-            fine_details=metadata.get('fine_details')
-        )
-        
-        # Update booking with fine payment status
-        booking.fine_paid = True
-        booking.save()
-        
-        # Send fine payment confirmation
-        send_fine_payment_confirmation(booking, metadata)
-        
-    except Exception as e:
-        print(f"Error processing fine payment for booking {booking_id}: {e}")
-        raise
-
-def handle_saved_payment_method(setup_intent, metadata):
-    """Save customer's payment method for future use"""
-    booking_id = metadata['booking_id']
-    payment_method_id = setup_intent.payment_method
-    
-    try:
-        booking = Booking.objects.get(id=booking_id)
-        payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
-        
-        if payment_method.type == 'card':
-            # Set all other payment methods for this booking as non-default
-            CustomerPaymentMethod.objects.filter(booking=booking).update(is_default=False)
+        if not amount:
+            return JsonResponse({'error': 'Amount is required'}, status=400)
             
-            # Create new payment method record
-            CustomerPaymentMethod.objects.create(
-                booking=booking,
-                stripe_payment_method_id=payment_method.id,
-                card_brand=payment_method.card.brand,
-                card_last4=payment_method.card.last4,
-                is_default=True
+        try:
+            booking = Booking.objects.get(id=booking_id)
+        except Booking.DoesNotExist:
+            return JsonResponse({'error': 'Booking not found'}, status=404)
+            
+        # Find the most recent payment with a payment method and customer ID
+        payment = Payment.objects.filter(
+            booking=booking,
+            stripe_payment_method_id__isnull=False,
+            stripe_customer_id__isnull=False,
+            status='succeeded'
+        ).order_by('-created_at').first()
+        
+        if not payment:
+            return JsonResponse({'error': 'No reusable payment method or customer ID found for this booking'}, status=400)
+            
+        try:
+            # First try to create a SetupIntent to ensure the payment method can be used off-session
+            setup_intent = stripe.SetupIntent.create(
+                customer=payment.stripe_customer_id,
+                payment_method=payment.stripe_payment_method_id,
             )
             
-            # Send confirmation that card was saved
-            send_payment_method_confirmation(booking, payment_method)
+            # Then create the PaymentIntent
+            payment_intent = stripe.PaymentIntent.create(
+                amount=int(float(amount) * 100),
+                currency='eur',
+                customer=payment.stripe_customer_id,
+                payment_method=payment.stripe_payment_method_id,
+                off_session=True,
+                confirm=True,
+                description=f"Traffic fine for booking {booking_id}",
+                metadata={
+                    'booking_id': str(booking_id),
+                    'reason': reason,
+                    'type': 'fine'
+                }
+            )
+            
+            # Handle possible actions required
+            if payment_intent.status == 'requires_action':
+                return JsonResponse({
+                    'error': 'requires_action',
+                    'client_secret': payment_intent.client_secret,
+                    'status': payment_intent.status
+                }, status=200)
+                
+            # Create a record of the fine payment
+            fine_payment = Payment.objects.create(
+                booking=booking,
+                stripe_payment_intent_id=payment_intent.id,
+                stripe_payment_method_id=payment.stripe_payment_method_id,
+                stripe_customer_id=payment.stripe_customer_id,
+                amount=float(amount),
+                status=payment_intent.status,
+                payment_type='fine',
+                payment_method_type=payment.payment_method_type,
+                payment_method_brand=payment.payment_method_brand,
+                payment_method_last4=payment.payment_method_last4
+            )
+            
+            if payment_intent.status == 'succeeded':
+                fine_payment.status = 'succeeded'
+                fine_payment.save()
+                send_fine_notification(booking, amount, reason)
+                
+                return JsonResponse({
+                    'success': True,
+                    'payment_id': str(fine_payment.id),
+                    'amount': amount,
+                    'status': payment_intent.status
+                })
+            else:
+                return JsonResponse({
+                    'error': 'Payment processing',
+                    'status': payment_intent.status
+                }, status=202)
+                
+        except stripe.error.CardError as e:
+            # Handle specific card errors
+            error_code = e.code if hasattr(e, 'code') else None
+            payment_intent_id = e.payment_intent['id'] if hasattr(e, 'payment_intent') else None
+            
+            if payment_intent_id:
+                payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+                
+            return JsonResponse({
+                'error': str(e),
+                'code': error_code,
+                'payment_intent_id': payment_intent_id,
+                'status': payment_intent.status if payment_intent_id else None
+            }, status=400)
+            
+        except stripe.error.StripeError as e:
+            return JsonResponse({'error': str(e)}, status=400)
             
     except Exception as e:
-        print(f"Error saving payment method for booking {booking_id}: {e}")
-        raise
-
-def handle_off_session_fine_payment(payment_intent, metadata):
-    """Process successful fine payment using saved card"""
-    booking_id = metadata['booking_id']
+        return JsonResponse({'error': str(e)}, status=500)
     
-    try:
-        booking = Booking.objects.get(id=booking_id)
-        
-        Payment.objects.create(
-            booking=booking,
-            stripe_payment_intent_id=payment_intent['id'],
-            amount=float(payment_intent['amount'] / 100),
-            status='succeeded',
-            payment_type='fine',
-            fine_reason=metadata.get('reason'),
-            fine_details=metadata.get('fine_details')
-        )
-        
-        # Update booking with fine payment status
-        booking.fine_paid = True
-        booking.save()
-        
-        # Send fine payment confirmation
-        send_fine_payment_confirmation(booking, metadata)
-        
-    except Exception as e:
-        print(f"Error processing off-session fine payment for booking {booking_id}: {e}")
-        raise
-
-
-def handle_failed_fine_payment(payment_intent, metadata):
-    """Handle failed fine payment attempt using saved card"""
-    booking_id = metadata['booking_id']
-    last_payment_error = payment_intent.get('last_payment_error', {})
     
-    try:
-        booking = Booking.objects.get(id=booking_id)
-        guest = booking.guest  # assuming booking.guest exists
+def send_fine_notification(booking, amount, reason):
+    """Send notification about traffic fine"""
+    subject = f"Traffic Fine Notification for Booking {booking.id}"
+    
+    # Get guest details from the booking
+    guest = booking.guest  # ForeignKey relationship
+    guest_email = guest.email  # Access the email of the guest
+    
+    if not guest_email:
+        return JsonResponse({'error': 'No email found for the guest'}, status=400)
+    
+    message = f"""
+    Dear {guest.first_name} {guest.last_name},
+    
+    We would like to inform you that a traffic fine has been charged to your payment method on file.
+    
+    Fine Details:
+    ============================================
+    - Booking Reference: {booking.id}
+    - Amount: €{amount}
+    - Reason: {reason}
+    ============================================
+    
+    If you believe this is an error, please contact our support team.
+    
+    Best regards,
+    The Car Rental Service Team
+    """
+    
+    send_mail(
+        subject,
+        message.strip(),
+        settings.DEFAULT_FROM_EMAIL,
+        [guest_email],  # Send to the guest's email
+        fail_silently=False,
+    )
 
-        # Delete the driver's license image file (if stored locally)
-        if guest.driver_license:
-            file_path = os.path.join(settings.MEDIA_ROOT, guest.driver_license)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                print(f"Deleted driver's license image: {file_path}")
-            guest.driver_license = ""  # Clear the driver's license field
-            guest.save()
 
-        # Log the failed payment attempt
-        Payment.objects.create(
-            booking=booking,
-            stripe_payment_intent_id=payment_intent['id'],
-            amount=float(payment_intent['amount'] / 100),
-            status='failed',
-            payment_type='fine',
-            failure_reason=last_payment_error.get('message'),
-            failure_code=last_payment_error.get('code')
-        )
-        
-        # Notify admin and customer about the failed payment
-        notify_failed_fine_payment(booking, metadata, last_payment_error)
-        
-    except Exception as e:
-        print(f"Error processing failed fine payment for booking {booking_id}: {e}")
-        raise
-
-# Email notification functions (implement these according to your email service)
 
 def send_booking_confirmation(metadata):
-    """Send an elegant booking confirmation email using Stripe metadata"""
-    
+    """Send booking confirmation email"""
     subject = f"Booking Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
 
     message = f"""
@@ -578,13 +515,10 @@ def send_booking_confirmation(metadata):
     - Total Amount: €{metadata.get('amount', 'N/A')}
     ============================================
 
-    
     We appreciate your trust in our services and wish you pleasant travels.
 
     With warm regards,
     {metadata.get('company_name', 'The Car Rental Service')} Team
-
-   
     """
 
     recipient = metadata.get('guest_email')
@@ -598,9 +532,9 @@ def send_booking_confirmation(metadata):
             fail_silently=False,
         )
 
+
 def send_extension_confirmation(booking, metadata):
     """Send booking extension confirmation email"""
-
     subject = f"Booking Extension Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
 
     message = f"""
@@ -615,8 +549,6 @@ def send_extension_confirmation(booking, metadata):
     - New Vehicle Return: {metadata.get('return_date', '')} at {metadata.get('return_time', '')}
     - Total Amount: €{metadata.get('amount', 'N/A')}
     ============================================
-
-   
 
     We thank you for your continued trust in our services and wish you safe travels.
 
@@ -636,145 +568,14 @@ def send_extension_confirmation(booking, metadata):
         )
 
 
-def send_fine_payment_confirmation(booking, metadata):
-    """Send fine payment confirmation email"""
-    pass
-
-def send_payment_method_confirmation(booking, payment_method):
-    """Send confirmation that payment method was saved"""
-    pass
-
-def notify_failed_fine_payment(booking, metadata, error):
-    """Notify about failed fine payment"""
-    pass
-
-
 @csrf_exempt
 def stripe_session_detail(request, session_id):
     try:
         session = stripe.checkout.Session.retrieve(session_id)
         return JsonResponse({
             'id': session.id,
-            'metadata': session.metadata
+            'metadata': session.metadata,
+            'customer': session.customer if hasattr(session, 'customer') else None
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
-# api/payment/views.py
-
-@csrf_exempt
-def create_setup_intent(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            if 'booking_id' not in data:
-                return JsonResponse({'error': 'Missing booking_id'}, status=400)
-
-            # Create a SetupIntent
-            setup_intent = stripe.SetupIntent.create(
-                payment_method_types=['card'],
-                metadata={
-                    'booking_id': data['booking_id']
-                }
-            )
-            
-            return JsonResponse({
-                'client_secret': setup_intent.client_secret,
-                'setup_intent_id': setup_intent.id
-            })
-        except Exception as e:
-            print("Stripe error:", str(e))
-            return JsonResponse({'error': str(e)}, status=500)
-
-
-@csrf_exempt
-def save_payment_method(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            required_fields = ['setup_intent_id', 'booking_id']
-            for field in required_fields:
-                if field not in data:
-                    return JsonResponse({'error': f'Missing required field: {field}'}, status=400)
-
-            # Retrieve the SetupIntent
-            setup_intent = stripe.SetupIntent.retrieve(data['setup_intent_id'])
-            
-            if not setup_intent.payment_method:
-                return JsonResponse({'error': 'No payment method attached'}, status=400)
-
-            # Get payment method details
-            payment_method = stripe.PaymentMethod.retrieve(setup_intent.payment_method)
-            
-            if payment_method.type != 'card':
-                return JsonResponse({'error': 'Only card payments are supported'}, status=400)
-
-            # Save to database
-            booking = Booking.objects.get(id=data['booking_id'])
-            CustomerPaymentMethod.objects.create(
-                booking=booking,
-                stripe_payment_method_id=payment_method.id,
-                card_brand=payment_method.card.brand,
-                card_last4=payment_method.card.last4
-            )
-            
-            return JsonResponse({'success': True})
-        except Exception as e:
-            print("Stripe error:", str(e))
-            return JsonResponse({'error': str(e)}, status=500)
-
-
-@csrf_exempt
-def charge_saved_card(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            required_fields = ['booking_id', 'amount', 'reason', 'fine_details']
-            for field in required_fields:
-                if field not in data:
-                    return JsonResponse({'error': f'Missing required field: {field}'}, status=400)
-
-            # Get the booking and payment method
-            booking = Booking.objects.get(id=data['booking_id'])
-            payment_method = CustomerPaymentMethod.objects.filter(booking=booking).first()
-            
-            if not payment_method:
-                return JsonResponse({'error': 'No saved payment method found'}, status=400)
-
-            amount = int(float(data['amount']) * 100)
-            
-            # Create payment intent
-            payment_intent = stripe.PaymentIntent.create(
-                amount=amount,
-                currency='eur',
-                payment_method=payment_method.stripe_payment_method_id,
-                confirm=True,
-                off_session=True,
-                metadata={
-                    'booking_id': str(data['booking_id']),
-                    'reason': data['reason'],
-                    'fine_details': data['fine_details'],
-                    'payment_type': 'fine'
-                }
-            )
-            
-            # Create payment record
-            Payment.objects.create(
-                booking=booking,
-                stripe_payment_intent_id=payment_intent.id,
-                amount=float(data['amount']),
-                status='succeeded',
-                payment_type='fine'
-            )
-            
-            return JsonResponse({'success': True, 'payment_intent_id': payment_intent.id})
-        except stripe.error.CardError as e:
-            # Handle specific card errors
-            err = e.error
-            return JsonResponse({
-                'error': err.message,
-                'code': err.code,
-                'decline_code': err.decline_code if hasattr(err, 'decline_code') else None
-            }, status=400)
-        except Exception as e:
-            print("Stripe error:", str(e))
-            return JsonResponse({'error': str(e)}, status=500)

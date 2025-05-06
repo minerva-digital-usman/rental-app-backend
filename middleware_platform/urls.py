@@ -33,8 +33,6 @@ urlpatterns = [
     ),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
     path('admin/', admin.site.urls),  # Keep this last
-
-    
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # Serve media files during development

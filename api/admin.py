@@ -13,8 +13,7 @@ from api.guest.models import Guest
 from api.booking.models import Booking
 from api.garage.models import Car
 from api.linkCarandHotel.models import CarHotelLink
-from payments.admin import CustomerPaymentMethodAdmin
-from payments.models import CustomerPaymentMethod, Payment
+from payments.models import  Payment
 
 # Custom Admin Site with Jazmin-compatible groupings
 class CustomAdminSite(admin.AdminSite):
@@ -36,7 +35,7 @@ class CustomAdminSite(admin.AdminSite):
             {
                 'name': 'Management',
                 'app_label': 'booking_system',
-                'models': self._get_models_for_group(app_dict, ['Booking', 'Payment', 'CustomerPaymentMethod','RentalCompany', 'Guest'])
+                'models': self._get_models_for_group(app_dict, ['Booking', 'Payment','RentalCompany', 'Guest'])
             },
             
         ]
@@ -296,7 +295,6 @@ models_to_register = [
     (Hotel, HotelAdmin),
     (Car, CarAdmin),  # No custom admin
     (CarHotelLink, CarHotelLinkAdmin),
-    (CustomerPaymentMethod, CustomerPaymentMethodAdmin)
 ]
 
 for model, admin_class in models_to_register:
