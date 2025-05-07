@@ -7,7 +7,7 @@ from api.booking.models import Booking
 class Payment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='payments')
-    stripe_session_id = models.CharField(max_length=255, unique=True)
+    stripe_session_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
     stripe_customer_id = models.CharField(max_length=255, null=True, blank=True)
     stripe_payment_intent_id = models.CharField(max_length=255, null=True, blank=True)
     stripe_setup_intent_id = models.CharField(max_length=255, null=True, blank=True)

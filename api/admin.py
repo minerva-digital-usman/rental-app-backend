@@ -13,6 +13,7 @@ from api.guest.models import Guest
 from api.booking.models import Booking
 from api.garage.models import Car
 from api.linkCarandHotel.models import CarHotelLink
+from payments.challan.models import TrafficFine
 from payments.models import  Payment
 
 # Custom Admin Site with Jazmin-compatible groupings
@@ -35,7 +36,7 @@ class CustomAdminSite(admin.AdminSite):
             {
                 'name': 'Management',
                 'app_label': 'booking_system',
-                'models': self._get_models_for_group(app_dict, ['Booking', 'Payment','RentalCompany', 'Guest'])
+                'models': self._get_models_for_group(app_dict, ['Booking', 'Payment','RentalCompany', 'Guest', 'TrafficFine'])
             },
             
         ]
@@ -59,9 +60,41 @@ class CustomAdminSite(admin.AdminSite):
                         models.append(model)
         
         return models
-
 # Replace the default admin site
 admin.site = CustomAdminSite(name='admin')
+
+@admin.register(TrafficFine, site=admin.site)
+class TrafficFineAdmin(admin.ModelAdmin):
+    list_display = ('booking', 'amount', 'reason', 'created_at', 'charged_payment')
+    readonly_fields = ('charged_payment',)
+    search_fields = ('booking__guest__first_name', 'booking__guest__last_name')
+    list_filter = ('created_at',)
+
+    actions = ['charge_selected_fines']
+
+    def save_model(self, request, obj, form, change):
+        # Only attempt to charge if it hasn't been charged and was just saved
+        super().save_model(request, obj, form, change)
+
+        if not obj.charged_payment:
+            try:
+                obj.charge_fine()
+                self.message_user(request, f"Successfully charged fine for booking {obj.booking.id}", messages.SUCCESS)
+            except Exception as e:
+                self.message_user(request, f"Error charging fine: {e}", messages.ERROR)
+
+    def charge_selected_fines(self, request, queryset):
+        for fine in queryset:
+            if fine.charged_payment:
+                self.message_user(request, f"Fine for booking {fine.booking.id} already charged.", messages.WARNING)
+                continue
+            try:
+                fine.charge_fine()
+                self.message_user(request, f"Successfully charged fine for booking {fine.booking.id}", messages.SUCCESS)
+            except Exception as e:
+                self.message_user(request, f"Error charging fine for booking {fine.booking.id}: {e}", messages.ERROR)
+
+    charge_selected_fines.short_description = "Charge selected traffic fines"
 
 # --- Form Definitions ---
 class BookingForm(forms.ModelForm):
@@ -295,6 +328,8 @@ models_to_register = [
     (Hotel, HotelAdmin),
     (Car, CarAdmin),  # No custom admin
     (CarHotelLink, CarHotelLinkAdmin),
+    (TrafficFine, TrafficFineAdmin),
+
 ]
 
 for model, admin_class in models_to_register:
