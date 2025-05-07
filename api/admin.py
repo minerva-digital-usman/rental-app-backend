@@ -67,10 +67,16 @@ admin.site = CustomAdminSite(name='admin')
 class TrafficFineAdmin(admin.ModelAdmin):
     list_display = ('booking', 'amount', 'reason', 'created_at', 'charged_payment')
     readonly_fields = ('charged_payment',)
-    search_fields = ('booking__guest__first_name', 'booking__guest__last_name')
+    search_fields = (
+        'booking__guest__first_name', 
+        'booking__guest__last_name',
+    )
     list_filter = ('created_at',)
+    raw_id_fields = ('booking',)  # Removed 'car' from raw_id_fields
 
-    actions = ['charge_selected_fines']
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('booking', 'booking__guest')  # Removed 'car' from select_related
 
     def save_model(self, request, obj, form, change):
         # Only attempt to charge if it hasn't been charged and was just saved
@@ -184,7 +190,7 @@ class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
     list_display = ('id', 'guest_full_name', 'vehicle', 'hotel', 'start_time', 'end_time', 'buffer_time')
     list_filter = ('hotel', 'vehicle')  # Date filtering
-    search_fields = ('guest__first_name', 'guest__last_name')
+    search_fields = ('guest__first_name', 'guest__last_name','vehicle__plate_number')
     date_hierarchy = 'start_time'  # Optional date drilldown
 
     def guest_full_name(self, obj):

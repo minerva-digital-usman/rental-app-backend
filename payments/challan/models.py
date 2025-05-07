@@ -3,6 +3,7 @@ import uuid
 from django.db import models
 import stripe
 from api.booking.models import Booking
+from api.garage.models import Car
 from middleware_platform import settings
 from payments.models import Payment
 
@@ -18,6 +19,7 @@ class TrafficFine(models.Model):
 
     def __str__(self):
         return f"Fine for {self.booking} - €{self.amount}"
+ 
     
     def charge_fine(self):
         """
