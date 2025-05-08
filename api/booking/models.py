@@ -53,8 +53,9 @@ class Booking(models.Model):
         overlapping_bookings = Booking.objects.filter(
             vehicle=self.vehicle,
             end_time__gt=self.start_time,
-            start_time__lt=effective_end
+            start_time__lt=self.end_time  # Only check actual booking time, not buffer
         ).exclude(id=self.id)
+
 
         if overlapping_bookings.exists():
             raise ValidationError("This vehicle is already booked for the selected time.")
