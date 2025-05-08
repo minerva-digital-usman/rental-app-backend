@@ -1,3 +1,5 @@
+
+
 """
 Django settings for middleware_platform project.
 
@@ -11,8 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import warnings
-warnings.filterwarnings("ignore", message=".*pin_memory.*")
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,22 +25,34 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-i6khrkioubhlq5x=fqcz0i7y3kowbg3_y-07ard_*5-0h0!_6='
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 STRIPE_SECRET_KEY = 'sk_test_51REXBZIpkMgm9AXd3PAkWm1K9cNMftuYBDkoPsnNorDv8hUfldb0XDE1BEoamNzUEMhGSQ22JIUerkOTKYBUyOnw00syRm0uQE'
 STRIPE_PUBLIC_KEY = 'pk_test_51REXBZIpkMgm9AXd10Wr8V2dZqE0FgNXyn8ow7KDMr2lLizFHHyKgE5mUab5QBx9zTfb40Kd1vczMZKpb7gdvCTw003jH7RCPY'
 STRIPE_WEBHOOK_SECRET = 'whsec_Xj3zKkb5RYiC0eAtz182nHuhP4nKl63Y'
-BASE_URL_FRONTEND = "http://localhost:5173"
-BASE_URL_BACKEND = "http://127.0.0.1:8000"
+BASE_URL_FRONTEND = "https://rental.mdlabs.it"
+BASE_URL_BACKEND = "https://api.mdlabs.it"
 
-# ALLOWED_HOSTS = []
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app','2437-2001-b07-6464-ee3e-8d09-84a5-7233-10d2.ngrok-free.app']
+# ALLOWED_HOSTS = ['*']
+# ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app', ]
 
-
+ALLOWED_HOSTS = [
+    "mdlabs.it",
+    "www.mdlabs.it",
+    "127.0.0.1:8000",
+    "localhost:5173",
+    "127.0.0.1",
+    "159.223.221.86:8000",
+    "159.223.221.86:5173",
+    "api.mdlabs.it",
+    "159.223.221.86",
+    "rental.mdlabs.it",
+    "a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app"
+]
 
 # Application definition
 
 INSTALLED_APPS = [
-    'jazzmin',
+    'jazzmin', 
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -64,7 +77,23 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 CORS_ALLOW_ALL_ORIGINS = True  # ⚠️ Dev only. Use whitelist in production.
+
+# CSRF_TRUSTED_ORIGINS = [
+#     "https://rental.mdlabs.it",
+#     "https://rental.mdlabs.it",
+#     "https://www.rental.mdlabs.it",
+#     "http://rental.mdlabs.it",
+#     "http://www.rental.mdlabs.it",
+#     "http://127.0.0.1:8000",
+#     "http://localhost:5173",
+#     "http://159.223.221.86:5173",
+#     "http://159.223.221.86:8000",
+#     "http://159.223.221.86",
+#     "https://api.mdlabs.it"
+#     ]
+
 JAZZMIN_SETTINGS = {
     "site_title": "Rental Platform Admin",
     "site_header": "Rental Dashboard",
@@ -137,16 +166,27 @@ WSGI_APPLICATION = 'middleware_platform.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'project',  # Your PostgreSQL database name
-        'USER': 'postgres',  # Your PostgreSQL user
-        'PASSWORD': '221299',  # Your PostgreSQL user's password
-        'HOST': 'localhost',  # If PostgreSQL is running locally
-        'PORT': '5432',  # Default PostgreSQL port
+
+
+if DEBUG:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql_psycopg2",
+            "NAME": "project",
+            "USER": "postgres",
+            "PASSWORD": "221299",
+            "HOST": "localhost",
+            "PORT": "5432",
+        }
+    }
+
 
 
 # Password validation
@@ -183,9 +223,25 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Where collectstatic puts files
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  # Your original static files directory
+]
+
+# Media files (user-uploaded content)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 524288000
+
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
