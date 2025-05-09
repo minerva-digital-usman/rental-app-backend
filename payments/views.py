@@ -122,10 +122,15 @@ def create_extension_checkout_session(request):
 
             # Get the booking to retrieve the customer ID
             try:
-                booking = Booking.objects.get(id=data['booking_id'])
-                customer_id = booking.stripe_customer_id
-            except Booking.DoesNotExist:
+                booking_id = data['booking_id']
+                payment = Payment.objects.filter(
+                    booking_id=booking_id,
+                    stripe_customer_id__isnull=False
+                ).order_by('-created_at').first()
+                customer_id = payment.stripe_customer_id if payment else None
+            except Exception as e:
                 customer_id = None
+
 
             session = stripe.checkout.Session.create(
                 payment_method_types=['card'],
