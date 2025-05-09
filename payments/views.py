@@ -344,161 +344,11 @@ def handle_extension_payment(session, metadata):
         payment.save()
 
         # 4. Send extension confirmation email
-        send_extension_confirmation(booking, metadata)
+        # send_extension_confirmation(booking, metadata)
         
     except Exception as e:
         print(f"Error processing extension for booking {booking_id}: {e}")
         raise
-
-# @csrf_exempt
-# def charge_fine(request, booking_id):
-#     if request.method != 'POST':
-#         return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
-    
-#     try:
-#         data = json.loads(request.body)
-#         amount = data.get('amount')
-#         reason = data.get('reason', 'Traffic fine')
-        
-#         if not amount:
-#             return JsonResponse({'error': 'Amount is required'}, status=400)
-            
-#         try:
-#             booking = Booking.objects.get(id=booking_id)
-#         except Booking.DoesNotExist:
-#             return JsonResponse({'error': 'Booking not found'}, status=404)
-            
-#         # Find the most recent payment with a payment method and customer ID
-#         payment = Payment.objects.filter(
-#             booking=booking,
-#             stripe_payment_method_id__isnull=False,
-#             stripe_customer_id__isnull=False,
-#             status='succeeded'
-#         ).order_by('-created_at').first()
-        
-#         if not payment:
-#             return JsonResponse({'error': 'No reusable payment method or customer ID found for this booking'}, status=400)
-            
-#         try:
-#             # First try to create a SetupIntent to ensure the payment method can be used off-session
-#             setup_intent = stripe.SetupIntent.create(
-#                 customer=payment.stripe_customer_id,
-#                 payment_method=payment.stripe_payment_method_id,
-#             )
-            
-#             # Then create the PaymentIntent
-#             payment_intent = stripe.PaymentIntent.create(
-#                 amount=int(float(amount) * 100),
-#                 currency='eur',
-#                 customer=payment.stripe_customer_id,
-#                 payment_method=payment.stripe_payment_method_id,
-#                 off_session=True,
-#                 confirm=True,
-#                 description=f"Traffic fine for booking {booking_id}",
-#                 metadata={
-#                     'booking_id': str(booking_id),
-#                     'reason': reason,
-#                     'type': 'fine'
-#                 }
-#             )
-            
-#             # Handle possible actions required
-#             if payment_intent.status == 'requires_action':
-#                 return JsonResponse({
-#                     'error': 'requires_action',
-#                     'client_secret': payment_intent.client_secret,
-#                     'status': payment_intent.status
-#                 }, status=200)
-                
-#             # Create a record of the fine payment
-#             fine_payment = Payment.objects.create(
-#                 booking=booking,
-#                 stripe_payment_intent_id=payment_intent.id,
-#                 stripe_payment_method_id=payment.stripe_payment_method_id,
-#                 stripe_customer_id=payment.stripe_customer_id,
-#                 amount=float(amount),
-#                 status=payment_intent.status,
-#                 payment_type='fine',
-#                 payment_method_type=payment.payment_method_type,
-#                 payment_method_brand=payment.payment_method_brand,
-#                 payment_method_last4=payment.payment_method_last4
-#             )
-            
-#             if payment_intent.status == 'succeeded':
-#                 fine_payment.status = 'succeeded'
-#                 fine_payment.save()
-#                 send_fine_notification(booking, amount, reason)
-                
-#                 return JsonResponse({
-#                     'success': True,
-#                     'payment_id': str(fine_payment.id),
-#                     'amount': amount,
-#                     'status': payment_intent.status
-#                 })
-#             else:
-#                 return JsonResponse({
-#                     'error': 'Payment processing',
-#                     'status': payment_intent.status
-#                 }, status=202)
-                
-#         except stripe.error.CardError as e:
-#             # Handle specific card errors
-#             error_code = e.code if hasattr(e, 'code') else None
-#             payment_intent_id = e.payment_intent['id'] if hasattr(e, 'payment_intent') else None
-            
-#             if payment_intent_id:
-#                 payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
-                
-#             return JsonResponse({
-#                 'error': str(e),
-#                 'code': error_code,
-#                 'payment_intent_id': payment_intent_id,
-#                 'status': payment_intent.status if payment_intent_id else None
-#             }, status=400)
-            
-#         except stripe.error.StripeError as e:
-#             return JsonResponse({'error': str(e)}, status=400)
-            
-#     except Exception as e:
-#         return JsonResponse({'error': str(e)}, status=500)
-    
-    
-# def send_fine_notification(booking, amount, reason):
-#     """Send notification about traffic fine"""
-#     subject = f"Traffic Fine Notification for Booking {booking.id}"
-    
-#     # Get guest details from the booking
-#     guest = booking.guest  # ForeignKey relationship
-#     guest_email = guest.email  # Access the email of the guest
-    
-#     if not guest_email:
-#         return JsonResponse({'error': 'No email found for the guest'}, status=400)
-    
-#     message = f"""
-#     Dear {guest.first_name} {guest.last_name},
-    
-#     We would like to inform you that a traffic fine has been charged to your payment method on file.
-    
-#     Fine Details:
-#     ============================================
-#     - Booking Reference: {booking.id}
-#     - Amount: €{amount}
-#     - Reason: {reason}
-#     ============================================
-    
-#     If you believe this is an error, please contact our support team.
-    
-#     Best regards,
-#     The Car Rental Service Team
-#     """
-    
-#     send_mail(
-#         subject,
-#         message.strip(),
-#         settings.DEFAULT_FROM_EMAIL,
-#         [guest_email],  # Send to the guest's email
-#         fail_silently=False,
-#     )
 
 
 
@@ -538,39 +388,39 @@ def send_booking_confirmation(metadata):
         )
 
 
-def send_extension_confirmation(booking, metadata):
-    """Send booking extension confirmation email"""
-    subject = f"Booking Extension Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
+# def send_extension_confirmation(booking, metadata):
+#     """Send booking extension confirmation email"""
+#     subject = f"Booking Extension Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
 
-    message = f"""
-    Dear {metadata.get('guest_first_name', 'Valued Customer')} {metadata.get('guest_last_name', '')},
+#     message = f"""
+#     Dear {metadata.get('guest_first_name', 'Valued Customer')} {metadata.get('guest_last_name', '')},
 
-    We are pleased to confirm that your booking extension has been successfully processed with {metadata.get('company_name', 'Our Premium Car Rental Service')}. 
-    We are happy to continue providing you with our services.
+#     We are pleased to confirm that your booking extension has been successfully processed with {metadata.get('company_name', 'Our Premium Car Rental Service')}. 
+#     We are happy to continue providing you with our services.
 
-    Extended Booking Summary:
-    ============================================
-    - Booking Reference: {metadata.get('booking_id', 'N/A')}
-    - New Vehicle Return: {metadata.get('return_date', '')} at {metadata.get('return_time', '')}
-    - Total Amount: €{metadata.get('amount', 'N/A')}
-    ============================================
+#     Extended Booking Summary:
+#     ============================================
+#     - Booking Reference: {metadata.get('booking_id', 'N/A')}
+#     - New Vehicle Return: {metadata.get('return_date', '')} at {metadata.get('return_time', '')}
+#     - Total Amount: €{metadata.get('amount', 'N/A')}
+#     ============================================
 
-    We thank you for your continued trust in our services and wish you safe travels.
+#     We thank you for your continued trust in our services and wish you safe travels.
 
-    With warm regards,
-    {metadata.get('company_name', 'The Car Rental Service')} Team
-    """
+#     With warm regards,
+#     {metadata.get('company_name', 'The Car Rental Service')} Team
+#     """
 
-    recipient = metadata.get('guest_email')
+#     recipient = metadata.get('guest_email')
 
-    if recipient:
-        send_mail(
-            subject,
-            message.strip(),
-            settings.DEFAULT_FROM_EMAIL,
-            [recipient],
-            fail_silently=False,
-        )
+#     if recipient:
+#         send_mail(
+#             subject,
+#             message.strip(),
+#             settings.DEFAULT_FROM_EMAIL,
+#             [recipient],
+#             fail_silently=False,
+#         )
 
 
 @csrf_exempt
