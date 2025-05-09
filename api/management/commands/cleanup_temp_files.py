@@ -24,7 +24,7 @@ class Command(BaseCommand):
                 file_mtime = os.path.getmtime(full_path)
 
                 # If the file is older than 24 hours, delete it
-                if current_time - file_mtime > 10:  # 86400 seconds = 24 hours
+                if current_time - file_mtime > 86400:  # 86400 seconds = 24 hours
                     default_storage.delete(file_path)
                     self.stdout.write(self.style.SUCCESS(f'Deleted file: {file_path}'))
             else:
