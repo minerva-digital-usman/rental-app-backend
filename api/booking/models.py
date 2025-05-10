@@ -9,6 +9,15 @@ from datetime import timedelta
 from api.garage.models import Car
 
 class Booking(models.Model):
+    STATUS_ACTIVE = 'active'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_PENDING_CONFLICT = 'pending_conflict'
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_CANCELLED, 'Cancelled'),
+        (STATUS_PENDING_CONFLICT, 'Pending Conflict'),
+    ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -19,6 +28,11 @@ class Booking(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     buffer_time = models.IntegerField(default=30)  # Store buffer time in minutes
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE
+    )
   # Store buffer time in minutes
 
     def __str__(self):
@@ -53,8 +67,8 @@ class Booking(models.Model):
         overlapping_bookings = Booking.objects.filter(
             vehicle=self.vehicle,
             end_time__gt=self.start_time,
-            start_time__lt=self.end_time  # Only check actual booking time, not buffer
-        ).exclude(id=self.id)
+            start_time__lt=self.end_time
+        ).exclude(id=self.id).exclude(status=Booking.STATUS_PENDING_CONFLICT)
 
 
         if overlapping_bookings.exists():
@@ -83,3 +97,4 @@ class Booking(models.Model):
         self.clean()
         
         super().save(*args, **kwargs)
+    

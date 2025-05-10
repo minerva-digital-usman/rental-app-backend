@@ -13,13 +13,13 @@ router.register(r'rental-company', RentalCompanyViewSet)
 router.register(r'hotels', HotelViewSet)
 router.register(r'guests', GuestViewSet)
 router.register(r'bookings', BookingViewSet)
-# router.register(r'vehicles', VehicleViewSet)
-router.register(r'cars', CarViewSet)  # 'cars' will be the endpoint for this viewset
+router.register(r'cars', CarViewSet)  
 router.register(r'carhotellink', CarHotelLinkViewSet, basename='carhotellink')
 
 
+
 urlpatterns = [
-    path('', include(router.urls)),  # Include the router URLs
+    path('', include(router.urls)), 
    
 
 

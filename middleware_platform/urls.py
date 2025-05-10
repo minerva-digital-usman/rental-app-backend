@@ -4,7 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 
-from api.booking.views import ExtendBookingView
+from api.booking.views import ExtendBookingView, PriceCalculationView
 from api.guest.views import  upload_driver_license_temp
 from auth.forms import StrictAdminPasswordResetForm
 
@@ -32,6 +32,7 @@ urlpatterns = [
         name='password_reset_confirm'
     ),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
+    path('api/calculate-price/', PriceCalculationView.as_view(), name='calculate_price'),
     path('admin/', admin.site.urls),  # Keep this last
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

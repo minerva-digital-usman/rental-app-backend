@@ -1,5 +1,4 @@
 
-
 """
 Django settings for middleware_platform project.
 
@@ -122,7 +121,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'chatgpt6910@gmail.com'  # Your Outlook/Live email address
 EMAIL_HOST_PASSWORD = 'dyxl eipu hnun ctyx'  # Your Outlook/Live account password (or app password if 2FA is enabled)
 DEFAULT_FROM_EMAIL = 'chatgpt6910@gmail.com'
-
+ADMIN_EMAIL = 'zeeshan6910@gmail.com'
 
 
 

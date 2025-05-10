@@ -40,7 +40,7 @@ def validate_driver_license(text: str) -> bool:
                 'expiry date', 'exp', '4a', '4b', 'patente', 'guida', 
                 'italiana', 'italiano']
     match_count = sum(1 for keyword in keywords if keyword in text_lower)
-    return match_count >= 2
+    return match_count >= 3
 
 
 def is_driver_license_expired(expiry_date: str) -> Tuple[bool, Optional[datetime]]:

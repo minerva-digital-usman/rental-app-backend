@@ -123,3 +123,13 @@ class ExtendBookingSerializer(serializers.ModelSerializer):
         instance.end_time = validated_data['new_end_time']
         instance.save()
         return instance
+class PriceCalculationSerializer(serializers.Serializer):
+    vehicle = serializers.UUIDField()  # car ID
+    start_time = serializers.DateTimeField()
+    end_time = serializers.DateTimeField()
+
+    def validate(self, data):
+        # Ensure end time is after start time
+        if data['start_time'] >= data['end_time']:
+            raise serializers.ValidationError("End time must be after start time.")
+        return data

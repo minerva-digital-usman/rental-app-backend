@@ -188,7 +188,7 @@ class GuestAdmin(admin.ModelAdmin):
 
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
-    list_display = ('id', 'guest_full_name', 'vehicle', 'hotel', 'start_time', 'end_time', 'buffer_time')
+    list_display = ('id', 'guest_full_name', 'vehicle', 'hotel', 'start_time', 'end_time', 'buffer_time', 'status')
     list_filter = ('hotel', 'vehicle')  # Date filtering
     search_fields = ('guest__first_name', 'guest__last_name','vehicle__plate_number')
     date_hierarchy = 'start_time'  # Optional date drilldown
