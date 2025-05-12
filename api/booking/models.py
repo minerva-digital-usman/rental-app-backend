@@ -44,6 +44,10 @@ class Booking(models.Model):
         )
 
     def clean(self):
+        # Skip validation if the status is 'cancelled' or 'pending_conflict'
+        if self.status in [self.STATUS_CANCELLED, self.STATUS_PENDING_CONFLICT]:
+            return  # Skip validation
+
         if self.start_time >= self.end_time:
             raise ValidationError("End time must be after start time.")
 
@@ -59,20 +63,19 @@ class Booking(models.Model):
                     original_duration = original.end_time - original.start_time - timedelta(minutes=original.buffer_time)
                     effective_end = self.start_time + original_duration + timedelta(minutes=self.buffer_time)
             except Booking.DoesNotExist:
-                # If original not found, use current end time + buffer
                 if self.buffer_time:
                     effective_end = self.end_time + timedelta(minutes=self.buffer_time)
 
-        # Check overlaps with effective end time
+        # Check overlaps
         overlapping_bookings = Booking.objects.filter(
             vehicle=self.vehicle,
             end_time__gt=self.start_time,
             start_time__lt=self.end_time
-        ).exclude(id=self.id).exclude(status=Booking.STATUS_PENDING_CONFLICT)
-
+        ).exclude(id=self.id).exclude(status__in=[self.STATUS_CANCELLED, self.STATUS_PENDING_CONFLICT])
 
         if overlapping_bookings.exists():
             raise ValidationError("This vehicle is already booked for the selected time.")
+
 
     def save(self, *args, **kwargs):
         # For new bookings (creation)

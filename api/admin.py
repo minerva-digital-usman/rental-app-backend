@@ -3,16 +3,19 @@ from django.contrib import admin
 from django.contrib import messages
 from django.utils.html import format_html
 from django.db.models import Sum
+from django.db import transaction
 from django.contrib.auth.models import Group
 from django.apps import apps
-
-# Import all your models
+from django.core.mail import send_mail
+from django.conf import settings
+import stripe
 from api.rental_company.models import RentalCompany
 from api.hotel.models import Hotel
 from api.guest.models import Guest
 from api.booking.models import Booking
 from api.garage.models import Car
 from api.linkCarandHotel.models import CarHotelLink
+from api.bookingConflict.models import BookingConflict
 from payments.challan.models import TrafficFine
 from payments.models import  Payment
 
@@ -31,7 +34,7 @@ class CustomAdminSite(admin.AdminSite):
             {
                 'name': 'Setup',
                 'app_label': 'Management',
-                'models': self._get_models_for_group(app_dict, ['Car', 'CarHotelLink', 'Hotel'])
+                'models': self._get_models_for_group(app_dict, ['Car', 'CarHotelLink', 'Hotel','BookingConflict'])
             },
             {
                 'name': 'Management',
@@ -183,8 +186,165 @@ class GuestAdmin(admin.ModelAdmin):
             )
         return "No Image"
 
+@admin.register(BookingConflict)
+class BookingConflictAdmin(admin.ModelAdmin):
+    list_display = (
+        'original_booking_display',
+        'conflicting_booking_display',
+        'status',
+        'created_at'
+    )
+    search_fields = (
+        'original_booking__id',
+        'original_booking__guest__first_name',
+        'conflicting_booking__id',
+        'conflicting_booking__guest__first_name',
+    )
+    list_filter = ('status', 'created_at')
+    raw_id_fields = ('original_booking', 'conflicting_booking')
+    actions = ['mark_as_cancelled']
+
+    def original_booking_display(self, obj):
+        booking = obj.original_booking
+        guest = booking.guest
+        return f"{booking.id} - {guest.first_name} {guest.last_name} ({guest.phone})"
+    original_booking_display.short_description = 'Original Booking'
+
+    def conflicting_booking_display(self, obj):
+        booking = obj.conflicting_booking
+        guest = booking.guest
+        return f"{booking.id} - {guest.first_name} {guest.last_name} ({guest.phone})"
+    conflicting_booking_display.short_description = 'Conflicting Booking'
+
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            if change and 'status' in form.changed_data and obj.status == BookingConflict.STATUS_CANCELLED:
+                if obj.conflicting_booking.status == Booking.STATUS_PENDING_CONFLICT:
+                    # Update booking status
+                    Booking.objects.filter(id=obj.conflicting_booking.id).update(
+                        status=Booking.STATUS_CANCELLED
+                    )
+                    # Process refund
+                    self._process_refund(request, obj.conflicting_booking)
+                    self._send_cancellation_email(request, obj.conflicting_booking)
+
+                if obj.original_booking.status == Booking.STATUS_PENDING_CONFLICT:
+                    Booking.objects.filter(id=obj.original_booking.id).update(
+                        status=Booking.STATUS_CONFIRMED
+                    )
+        super().save_model(request, obj, form, change)
+
+    def mark_as_cancelled(self, request, queryset):
+        with transaction.atomic():
+            updated_count = 0
+            for conflict in queryset:
+                if conflict.status == BookingConflict.STATUS_PENDING:
+                    BookingConflict.objects.filter(id=conflict.id).update(
+                        status=BookingConflict.STATUS_CANCELLED
+                    )
+                    if conflict.conflicting_booking.status == Booking.STATUS_PENDING_CONFLICT:
+                        Booking.objects.filter(id=conflict.conflicting_booking.id).update(
+                            status=Booking.STATUS_CANCELLED
+                        )
+                        self._process_refund(request, conflict.conflicting_booking)
+                        self._send_cancellation_email(request, conflict.conflicting_booking)
+                        updated_count += 1
+
+                    if conflict.original_booking.status == Booking.STATUS_PENDING_CONFLICT:
+                        Booking.objects.filter(id=conflict.original_booking.id).update(
+                            status=Booking.STATUS_CONFIRMED
+                        )
+
+            self.message_user(request, f"Successfully cancelled {updated_count} conflict(s) and affected pending bookings.")
+
+    def _process_refund(self, request, booking):
+        """Process Stripe refund for the cancelled booking"""
+        try:
+            # Get the most recent successful payment for this booking
+            payment = Payment.objects.filter(
+                booking=booking,
+                status='succeeded',
+                payment_type='initial'
+            ).order_by('-created_at').first()
+
+            if not payment:
+                self.message_user(
+                    request,
+                    f"No successful payment found for booking {booking.id}",
+                    level=messages.WARNING
+                )
+                return
+
+            # Check if we have a payment intent
+            if payment.stripe_payment_intent_id:
+                # Create refund in Stripe
+                refund = stripe.Refund.create(
+                    payment_intent=payment.stripe_payment_intent_id,
+                    reason='requested_by_customer'
+                )
+
+                # Update payment status
+                payment.status = 'refunded'
+                payment.save()
+
+                self.message_user(
+                    request,
+                    f"Successfully processed refund for booking {booking.id}. Refund ID: {refund.id}"
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"No payment intent found for booking {booking.id}",
+                    level=messages.WARNING
+                )
+
+        except stripe.error.StripeError as e:
+            self.message_user(
+                request,
+                f"Stripe error while processing refund for booking {booking.id}: {str(e)}",
+                level=messages.ERROR
+            )
+        except Exception as e:
+            self.message_user(
+                request,
+                f"Error processing refund for booking {booking.id}: {str(e)}",
+                level=messages.ERROR
+            )
 
 
+    def _send_cancellation_email(self, request, booking):
+        try:
+            # Refresh the booking instance to get updated status
+            booking.refresh_from_db()
+
+            send_mail(
+                subject='Your Booking Has Been Cancelled',
+                message=(
+                    f"Dear {booking.guest.first_name} {booking.guest.last_name},\n\n"
+                    f"Your booking (ID: {booking.id}) has been cancelled due to a conflict resolution.\n\n"
+                    f"Please note that your payment will be refunded within 7 business days.\n\n"
+                    f"If you have any questions, feel free to contact us.\n\n"
+                    f"Best regards,\n"
+                    f"The Team"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[booking.guest.email],
+                fail_silently=False
+            )
+
+            self.message_user(
+                request,
+                f"Booking {booking.id} cancelled and email sent to {booking.guest.email}"
+            )
+        except Exception as e:
+            self.message_user(
+                request,
+                f"Failed to send email for booking {booking.id}: {str(e)}",
+                level=messages.ERROR
+            )
+
+
+    mark_as_cancelled.short_description = "Mark selected conflicts as cancelled (only if pending, and cancel pending bookings)"
 
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
@@ -335,6 +495,8 @@ models_to_register = [
     (Car, CarAdmin),  # No custom admin
     (CarHotelLink, CarHotelLinkAdmin),
     (TrafficFine, TrafficFineAdmin),
+    (BookingConflict, BookingConflictAdmin),
+
 
 ]
 

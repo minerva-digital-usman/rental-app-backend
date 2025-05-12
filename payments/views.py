@@ -388,41 +388,6 @@ def send_booking_confirmation(metadata):
         )
 
 
-# def send_extension_confirmation(booking, metadata):
-#     """Send booking extension confirmation email"""
-#     subject = f"Booking Extension Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
-
-#     message = f"""
-#     Dear {metadata.get('guest_first_name', 'Valued Customer')} {metadata.get('guest_last_name', '')},
-
-#     We are pleased to confirm that your booking extension has been successfully processed with {metadata.get('company_name', 'Our Premium Car Rental Service')}. 
-#     We are happy to continue providing you with our services.
-
-#     Extended Booking Summary:
-#     ============================================
-#     - Booking Reference: {metadata.get('booking_id', 'N/A')}
-#     - New Vehicle Return: {metadata.get('return_date', '')} at {metadata.get('return_time', '')}
-#     - Total Amount: €{metadata.get('amount', 'N/A')}
-#     ============================================
-
-#     We thank you for your continued trust in our services and wish you safe travels.
-
-#     With warm regards,
-#     {metadata.get('company_name', 'The Car Rental Service')} Team
-#     """
-
-#     recipient = metadata.get('guest_email')
-
-#     if recipient:
-#         send_mail(
-#             subject,
-#             message.strip(),
-#             settings.DEFAULT_FROM_EMAIL,
-#             [recipient],
-#             fail_silently=False,
-#         )
-
-
 @csrf_exempt
 def stripe_session_detail(request, session_id):
     try:

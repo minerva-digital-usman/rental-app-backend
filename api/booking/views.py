@@ -11,6 +11,7 @@ from api.booking.models import Booking
 from api.booking.serializers import BookingSerializer, ExtendBookingSerializer
 from rest_framework.views import APIView
 from rest_framework import status
+from api.bookingConflict.models import BookingConflict
 
 
 from api.booking.email_service import Email
@@ -33,7 +34,7 @@ class ExtendBookingView(APIView):
                 {"detail": "Booking not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-
+    
     def patch(self, request, booking_id):
         """
         Partially update a booking using booking ID (for time extension)
@@ -88,9 +89,18 @@ class ExtendBookingView(APIView):
 
                         # Mark as pending_conflict instead of deleting
                         conflicting_booking.status = Booking.STATUS_PENDING_CONFLICT
+                        conflicting_booking.save()
+
+                        # ✅ Log conflict in BookingConflict table
+                        BookingConflict.objects.create(
+                            original_booking=booking,
+                            conflicting_booking=conflicting_booking,
+                            status=BookingConflict.STATUS_PENDING
+                        )
+
+                        # Send notifications
                         email_service.notify_admin_of_pending_conflict(conflicting_booking, booking, buffered_new_end_time)
 
-                        conflicting_booking.save()
 
                     # Update the original booking after cancellations
                     booking.end_time = buffered_new_end_time
