@@ -90,8 +90,8 @@ class Hotel(models.Model):
         help_text="URL encoded in hotel QR code to access car rental booking page"
     )
     qr_code = models.ImageField(upload_to='hotel_qr_codes/', blank=True, null=True)
-    latitude = models.DecimalField(max_digits=10, decimal_places=10, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=10, decimal_places=10, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=19, decimal_places=10, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=19, decimal_places=10, null=True, blank=True)
     
     # Add the custom manager
     objects = HotelManager()
