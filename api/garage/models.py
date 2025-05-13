@@ -2,6 +2,8 @@ import os
 from django.db import models
 import uuid
 
+from django.dispatch import receiver
+from django.db.models.signals import post_delete
 from django.forms import ValidationError
 from api.rental_company.models import RentalCompany
 from api.hotel.models import Hotel  # ✅ Import Hotel model
@@ -102,6 +104,8 @@ class Car(models.Model):
         default="Petrol",
         help_text="Type of fuel the car uses."
     )
+    
+    
     def delete(self, *args, **kwargs):
         # Delete the photo file from the file system
         if self.photo and os.path.isfile(self.photo.path):
@@ -128,3 +132,16 @@ class Car(models.Model):
 
     def __str__(self):
         return f"{self.model} ({self.plate_number})"
+    
+@receiver(post_delete, sender=Car)
+def delete_car_photo_on_delete(sender, instance, **kwargs):
+    """        
+    Deletes car photo file from filesystem
+    when corresponding `Car` object is deleted.
+    """
+    if instance.photo and os.path.isfile(instance.photo.path):
+        try:
+            os.remove(instance.photo.path)
+        except Exception as e:
+            # Optionally log the error
+            print(f"Error deleting file: {e}")
