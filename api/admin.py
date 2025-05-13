@@ -1,3 +1,4 @@
+from django.utils.timezone import localtime
 from django import forms
 from django.contrib import admin
 from django.contrib import messages
@@ -8,6 +9,7 @@ from django.contrib.auth.models import Group
 from django.apps import apps
 from django.core.mail import send_mail
 from django.conf import settings
+import requests
 import stripe
 from api.rental_company.models import RentalCompany
 from api.hotel.models import Hotel
@@ -16,16 +18,16 @@ from api.booking.models import Booking
 from api.garage.models import Car
 from api.linkCarandHotel.models import CarHotelLink
 from api.bookingConflict.models import BookingConflict
+from api.booking.email_service import Email
 from payments.challan.models import TrafficFine
 from payments.models import  Payment
 
-# Custom Admin Site with Jazmin-compatible groupings
 class CustomAdminSite(admin.AdminSite):
     site_header = "Booking Management System"
     site_title = "Admin Portal"
     index_title = "Dashboard"
-    
-    def get_app_list(self, request):
+
+    def get_app_list(self, request, app_label=None):
         # Build the default app dictionary
         app_dict = self._build_app_dict(request)
         
@@ -34,19 +36,18 @@ class CustomAdminSite(admin.AdminSite):
             {
                 'name': 'Setup',
                 'app_label': 'Management',
-                'models': self._get_models_for_group(app_dict, ['Car', 'CarHotelLink', 'Hotel','BookingConflict'])
+                'models': self._get_models_for_group(app_dict, ['Car', 'CarHotelLink', 'Hotel', 'BookingConflict'])
             },
             {
                 'name': 'Management',
                 'app_label': 'booking_system',
-                'models': self._get_models_for_group(app_dict, ['Booking', 'Payment','RentalCompany', 'Guest', 'TrafficFine'])
+                'models': self._get_models_for_group(app_dict, ['Booking', 'Payment', 'RentalCompany', 'Guest', 'TrafficFine'])
             },
-            
         ]
         
         # Filter out empty groups and ensure Jazmin compatibility
         return [group for group in custom_groups if group['models']]
-    
+
     def _get_models_for_group(self, app_dict, model_names):
         """Helper method to get models from app_dict by name"""
         models = []
@@ -185,6 +186,77 @@ class GuestAdmin(admin.ModelAdmin):
                 full_url
             )
         return "No Image"
+    
+    
+
+class BookingConflictForm(forms.ModelForm):
+    hotel_car_choice = forms.ChoiceField(
+        choices=[],
+        required=False,
+        label="Available Hotels & Cars",
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    
+    class Meta:
+        model = BookingConflict
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['hotel_car_choice'].choices = self.get_available_options()
+
+    def get_available_options(self):
+        choices = [("", "--- Select a hotel and car ---")]
+        instance = self.instance
+
+        if instance and instance.conflicting_booking:
+            booking = instance.conflicting_booking
+            hotel = booking.hotel
+            lat = getattr(hotel, 'latitude', None)
+            lon = getattr(hotel, 'longitude', None)
+
+            if not lat or not lon:
+                return choices
+
+            try:
+                url = self.build_nearby_hotels_url(lat, lon, booking.start_time, booking.end_time)
+                response = requests.get(url)
+                response.raise_for_status()
+                choices.extend(self.parse_api_response(response.json()))
+            except requests.RequestException as e:
+                print(f"Error fetching hotel data: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+
+        return choices
+
+    def build_nearby_hotels_url(self, lat, lon, start_time, end_time):
+        return (
+            f'http://localhost:8000/hotels/nearby/?lat={lat}&lon={lon}'
+            f'&radius=2&start_time={start_time.strftime("%Y-%m-%dT%H:%M:%SZ")}'
+            f'&end_time={end_time.strftime("%Y-%m-%dT%H:%M:%SZ")}'
+        )
+
+    def parse_api_response(self, data):
+        options = []
+        for hotel in data.get('results', []):
+            if not hotel.get('available_linked_cars'):
+                continue
+                
+            for car in hotel.get('available_linked_cars', []):
+                if car.get('status') != 'available':
+                    continue
+                    
+                option_value = f"{hotel['id']}|{car['id']}"
+                option_label = (
+                    f"{hotel['name']} ({hotel.get('distance_km', 0):.2f} km) - "
+                    f"{car['model']} ({car.get('plate_number', 'N/A')}) - "
+                    f"{hotel.get('location', 'N/A')}"
+                )
+                options.append((option_value, option_label))
+        return options
+
+
 
 @admin.register(BookingConflict)
 class BookingConflictAdmin(admin.ModelAdmin):
@@ -192,7 +264,7 @@ class BookingConflictAdmin(admin.ModelAdmin):
         'original_booking_display',
         'conflicting_booking_display',
         'status',
-        'created_at'
+        'created_at',
     )
     search_fields = (
         'original_booking__id',
@@ -203,6 +275,7 @@ class BookingConflictAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at')
     raw_id_fields = ('original_booking', 'conflicting_booking')
     actions = ['mark_as_cancelled']
+    form = BookingConflictForm  # Use the custom form here
 
     def original_booking_display(self, obj):
         booking = obj.original_booking
@@ -217,21 +290,40 @@ class BookingConflictAdmin(admin.ModelAdmin):
     conflicting_booking_display.short_description = 'Conflicting Booking'
 
     def save_model(self, request, obj, form, change):
-        with transaction.atomic():
-            if change and 'status' in form.changed_data and obj.status == BookingConflict.STATUS_CANCELLED:
-                if obj.conflicting_booking.status == Booking.STATUS_PENDING_CONFLICT:
-                    # Update booking status
-                    Booking.objects.filter(id=obj.conflicting_booking.id).update(
-                        status=Booking.STATUS_CANCELLED
-                    )
-                    # Process refund
-                    self._process_refund(request, obj.conflicting_booking)
-                    self._send_cancellation_email(request, obj.conflicting_booking)
 
-                if obj.original_booking.status == Booking.STATUS_PENDING_CONFLICT:
-                    Booking.objects.filter(id=obj.original_booking.id).update(
-                        status=Booking.STATUS_CONFIRMED
-                    )
+        with transaction.atomic():
+            if change and 'status' in form.changed_data:
+                if obj.status == BookingConflict.STATUS_CANCELLED:
+                    if obj.conflicting_booking.status == Booking.STATUS_PENDING_CONFLICT:
+                        # Update booking status
+                        Booking.objects.filter(id=obj.conflicting_booking.id).update(
+                            status=Booking.STATUS_CANCELLED
+                        )
+                        # Process refund
+                        self._process_refund(request, obj.conflicting_booking)
+                        self._send_cancellation_email(request, obj.conflicting_booking)
+
+                    if obj.original_booking.status == Booking.STATUS_PENDING_CONFLICT:
+                        Booking.objects.filter(id=obj.original_booking.id).update(
+                            status=Booking.STATUS_CONFIRMED
+                        )
+
+                elif change and obj.status == BookingConflict.STATUS_RESOLVED:
+                    selected_option = form.cleaned_data.get("hotel_car_choice")
+                    if selected_option:
+                        try:
+                            
+                            hotel_id, car_id = selected_option.split('|')
+                            print(f"Selected hotel ID: {hotel_id}, car ID: {car_id}")
+                            obj.conflicting_booking.hotel_id = hotel_id
+                            obj.conflicting_booking.vehicle_id = car_id  # ✅ correct field
+                            obj.conflicting_booking.status = 'active'
+                            obj.conflicting_booking.save()
+                            email_service = Email()
+                            email_service.send_conflict_resolved_email(obj.conflicting_booking)
+                        except ValueError:
+                            self.message_user(request, "Invalid selection format", level='error')
+        
         super().save_model(request, obj, form, change)
 
     def mark_as_cancelled(self, request, queryset):
@@ -258,11 +350,21 @@ class BookingConflictAdmin(admin.ModelAdmin):
             self.message_user(request, f"Successfully cancelled {updated_count} conflict(s) and affected pending bookings.")
 
     def _process_refund(self, request, booking):
-        """Process Stripe refund for the cancelled booking"""
+        """Process Stripe refund for the cancelled booking (conflicting only)"""
         try:
-            # Get the most recent successful payment for this booking
+            # Double check we are refunding only the conflicting booking
+            booking.refresh_from_db()
+            if booking.status != Booking.STATUS_CANCELLED:
+                self.message_user(
+                    request,
+                    f"Booking {booking.id} is not marked as cancelled. Skipping refund.",
+                    level=messages.WARNING
+                )
+                return
+
+            # Get the most recent successful initial payment for THIS booking only
             payment = Payment.objects.filter(
-                booking=booking,
+                booking_id=booking.id,
                 status='succeeded',
                 payment_type='initial'
             ).order_by('-created_at').first()
@@ -275,21 +377,31 @@ class BookingConflictAdmin(admin.ModelAdmin):
                 )
                 return
 
-            # Check if we have a payment intent
+            # Double-check that the payment intent isn't reused across other bookings
+            shared_intents = Payment.objects.filter(
+                stripe_payment_intent_id=payment.stripe_payment_intent_id
+            ).exclude(booking_id=booking.id)
+
+            if shared_intents.exists():
+                self.message_user(
+                    request,
+                    f"⚠️ Warning: Payment intent {payment.stripe_payment_intent_id} is shared by other bookings. Aborting refund to prevent accidental multi-refund.",
+                    level=messages.ERROR
+                )
+                return
+
+            # Process the refund via Stripe
             if payment.stripe_payment_intent_id:
-                # Create refund in Stripe
                 refund = stripe.Refund.create(
                     payment_intent=payment.stripe_payment_intent_id,
                     reason='requested_by_customer'
                 )
-
-                # Update payment status
                 payment.status = 'refunded'
                 payment.save()
 
                 self.message_user(
                     request,
-                    f"Successfully processed refund for booking {booking.id}. Refund ID: {refund.id}"
+                    f"✅ Successfully refunded booking {booking.id}. Refund ID: {refund.id}"
                 )
             else:
                 self.message_user(
@@ -301,15 +413,16 @@ class BookingConflictAdmin(admin.ModelAdmin):
         except stripe.error.StripeError as e:
             self.message_user(
                 request,
-                f"Stripe error while processing refund for booking {booking.id}: {str(e)}",
+                f"Stripe error during refund of booking {booking.id}: {str(e)}",
                 level=messages.ERROR
             )
         except Exception as e:
             self.message_user(
                 request,
-                f"Error processing refund for booking {booking.id}: {str(e)}",
+                f"Unexpected error while refunding booking {booking.id}: {str(e)}",
                 level=messages.ERROR
             )
+
 
 
     def _send_cancellation_email(self, request, booking):
@@ -349,7 +462,7 @@ class BookingConflictAdmin(admin.ModelAdmin):
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
     list_display = ('id', 'guest_full_name', 'vehicle', 'hotel', 'start_time', 'end_time', 'buffer_time', 'status')
-    list_filter = ('hotel', 'vehicle')  # Date filtering
+    list_filter = ('hotel', 'vehicle', 'status')  # Date filtering
     search_fields = ('guest__first_name', 'guest__last_name','vehicle__plate_number')
     date_hierarchy = 'start_time'  # Optional date drilldown
 
@@ -375,18 +488,32 @@ class PaymentAdmin(admin.ModelAdmin):
     def hotel_id(self, obj):
         return obj.booking.hotel.id if obj.booking and obj.booking.hotel else '-'
     hotel_id.short_description = 'Hotel ID'
+class HotelAdminForm(forms.ModelForm):
+    class Meta:
+        model = Hotel
+        fields = '__all__'
 
+    class Media:
+        js = (
+            'https://code.jquery.com/jquery-3.6.0.min.js',
+            '/static/js/admin_location_autocomplete.js',  # You'll create this
+        )
 class HotelAdmin(admin.ModelAdmin):
-    list_display = ('name', 'location', 'phone', 'email', 'qr_code_preview', 'total_earnings')
+    form = HotelAdminForm
+
+    list_display = (
+        'name', 'location', 'phone', 'email', 'qr_code_preview', 
+        'total_earnings', 'latitude', 'longitude'
+    )
     search_fields = ('name', 'location', 'phone', 'email')
     list_filter = ('rental_company', 'location')
     list_editable = ('phone', 'email')
     list_per_page = 20
     autocomplete_fields = ['rental_company']  # This now works with RentalCompanyAdmin
-    
+
     fieldsets = (
         ('Basic Information', {
-            'fields': ('name', 'location', 'rental_company')
+            'fields': ('name', 'location', 'rental_company', 'latitude', 'longitude')
         }),
         ('Contact Information', {
             'fields': ('phone', 'email')
@@ -395,9 +522,9 @@ class HotelAdmin(admin.ModelAdmin):
             'fields': ('guest_booking_url', 'qr_code')
         }),
     )
-    
+
     readonly_fields = ('qr_code_preview',)
-    
+
     def qr_code_preview(self, obj):
         if obj.qr_code:
             return format_html('''
@@ -425,7 +552,6 @@ class HotelAdmin(admin.ModelAdmin):
         return "-"
     qr_code_preview.short_description = 'QR Code'
 
-    
     def total_earnings(self, obj):
         # Aggregate payments based on the hotel ID
         total = Payment.objects.filter(booking__hotel=obj).aggregate(Sum('amount'))['amount__sum']
@@ -437,6 +563,11 @@ class HotelAdmin(admin.ModelAdmin):
             obj.guest_booking_url = obj.generate_guest_booking_url()
         if change and ('name' in form.changed_data or not obj.qr_code):
             obj.generate_qr_code()
+
+        # Ensure geocoding is done if location is set and latitude/longitude are not present
+        if obj.location and not obj.latitude and not obj.longitude:
+            obj.geocode_address()
+
         super().save_model(request, obj, form, change)
 
 class CarHotelLinkAdmin(admin.ModelAdmin):

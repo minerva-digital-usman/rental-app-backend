@@ -1,6 +1,5 @@
 from datetime import timedelta
 from rest_framework import serializers
-from api.vehicle.models import Vehicle
 from api.booking.models import Booking
 from api.guest.models import Guest
 from api.guest.serializers import GuestSerializer
@@ -30,6 +29,8 @@ class BookingSerializer(serializers.ModelSerializer):
             'start_time',
             'end_time',
             'buffer_time',
+            'status', 
+
         ]
 
     def create(self, validated_data):

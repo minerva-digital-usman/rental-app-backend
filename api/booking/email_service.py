@@ -1,4 +1,5 @@
   
+from datetime import timedelta
 from django.core.mail import send_mail
 
 from middleware_platform import settings
@@ -42,13 +43,13 @@ class Email:
     def send_pending_conflict_email(self, pending_booking, extending_booking, new_end_time):
         """Send plain text email notification regarding pending conflict status."""
         subject = f"Booking Status Update: {pending_booking.vehicle.model} - Pending Confirmation"
-
+        pending_actual_end_time = pending_booking.end_time - timedelta(minutes=pending_booking.buffer_time)
         message = f"""
         Dear {pending_booking.guest.first_name} {pending_booking.guest.last_name},
 
         We would like to inform you that your booking for the {pending_booking.vehicle.model}, originally scheduled from 
         {pending_booking.start_time.strftime('%B %d, %Y %H:%M')} to 
-        {pending_booking.end_time.strftime('%B %d, %Y %H:%M')}, is currently marked as *pending confirmation* due to a scheduling conflict.
+        {pending_actual_end_time.strftime('%B %d, %Y %H:%M')}, is currently marked as *pending confirmation* due to a scheduling conflict.
 
         A higher-priority booking has been extended and is now scheduled to occupy the vehicle until 
         {new_end_time.strftime('%B %d, %Y %H:%M')}. As a result, we are reviewing availability and will update you as soon as possible.
@@ -128,5 +129,32 @@ class Email:
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[settings.ADMIN_EMAIL],  # Ensure this is set in your Django settings
+            fail_silently=False,
+        )
+
+    def send_conflict_resolved_email(self, booking):
+        guest = booking.guest
+        hotel = booking.hotel
+        car = booking.vehicle  # or booking.car if you call it differently
+
+        subject = "Your Booking Conflict Has Been Resolved"
+        message = (
+            f"Dear {guest.first_name},\n\n"
+            f"Good news! Your booking conflict has been resolved.\n\n"
+            f"Your new hotel: {hotel.name}\n"
+            f"Address: {hotel.location}\n"
+            f"Car: {car.model} ({car.plate_number})\n"
+            f"Booking time: {booking.start_time.strftime('%Y-%m-%d %H:%M')} "
+            f"to {booking.end_time.strftime('%Y-%m-%d %H:%M')}\n\n"
+            f"If you have any questions, please contact support.\n\n"
+            f"Thank you,\nThe Support Team"
+        )
+
+        # Use Django's email backend
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [guest.email],
             fail_silently=False,
         )

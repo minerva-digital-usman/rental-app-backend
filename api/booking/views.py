@@ -65,7 +65,7 @@ class ExtendBookingView(APIView):
 
                 # Send the extension email first before canceling conflicting bookings
                 email_service = Email()  # Instantiate the Email class
-                email_service.send_extension_email(booking, buffered_new_end_time)
+                email_service.send_extension_email(booking, raw_new_end_time)
 
                 # Find conflicting bookings
                 conflicting_bookings = Booking.objects.filter(
@@ -77,6 +77,10 @@ class ExtendBookingView(APIView):
                 canceled_details = []
                 if conflicting_bookings.exists():
                     for conflicting_booking in conflicting_bookings:
+                        # Skip cancelled bookings
+                        if conflicting_booking.status == Booking.STATUS_CANCELLED:
+                            continue
+
                         canceled_details.append({
                             'id': str(conflicting_booking.id),
                             'guest_email': conflicting_booking.guest.email,
@@ -101,7 +105,6 @@ class ExtendBookingView(APIView):
                         # Send notifications
                         email_service.notify_admin_of_pending_conflict(conflicting_booking, booking, buffered_new_end_time)
 
-
                     # Update the original booking after cancellations
                     booking.end_time = buffered_new_end_time
                     booking.save()
@@ -122,6 +125,7 @@ class ExtendBookingView(APIView):
                 {"detail": "Booking not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
             
 
 class PriceCalculationView(APIView):

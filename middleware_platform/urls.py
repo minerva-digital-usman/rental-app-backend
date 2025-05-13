@@ -7,6 +7,7 @@ from django.contrib.auth import views as auth_views
 from api.booking.views import ExtendBookingView, PriceCalculationView
 from api.guest.views import  upload_driver_license_temp
 from auth.forms import StrictAdminPasswordResetForm
+from api.hotel.views import nearby_hotels_view
 
 
 urlpatterns = [
@@ -31,6 +32,8 @@ urlpatterns = [
         ),
         name='password_reset_confirm'
     ),
+    path('hotels/nearby/', nearby_hotels_view, name='nearby_hotels'),
+
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
     path('api/calculate-price/', PriceCalculationView.as_view(), name='calculate_price'),
     path('admin/', admin.site.urls),  # Keep this last
