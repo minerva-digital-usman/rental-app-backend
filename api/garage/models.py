@@ -1,3 +1,4 @@
+import os
 from django.db import models
 import uuid
 
@@ -55,7 +56,12 @@ class Car(models.Model):
     model = models.CharField(max_length=100)
     plate_number = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True, null=True)
-
+    photo = models.ImageField(
+        upload_to='car_photos/',
+        blank=True,
+        null=True,
+        help_text="Optional photo of the car."
+    )
     status = models.CharField(
         max_length=50,
         choices=VEHICLE_STATUS_CHOICES,
@@ -96,7 +102,23 @@ class Car(models.Model):
         default="Petrol",
         help_text="Type of fuel the car uses."
     )
+    def delete(self, *args, **kwargs):
+        # Delete the photo file from the file system
+        if self.photo and os.path.isfile(self.photo.path):
+            os.remove(self.photo.path)
+        super().delete(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        try:
+            # Check if updating existing photo
+            this = Car.objects.get(id=self.id)
+            if this.photo and this.photo != self.photo:
+                if os.path.isfile(this.photo.path):
+                    os.remove(this.photo.path)
+        except Car.DoesNotExist:
+            pass  # It's a new object, no file to remove
 
+        super().save(*args, **kwargs)
+        
     def clean(self):
         # Custom validation to ensure pricing is not negative
         if self.price_per_hour < 0:
