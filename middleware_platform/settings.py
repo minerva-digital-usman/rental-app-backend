@@ -1,4 +1,5 @@
 
+
 """
 Django settings for middleware_platform project.
 
@@ -114,17 +115,11 @@ JAZZMIN_SETTINGS = {
 
 
 
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp-relay.brevo.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = '8cfff2001@smtp-brevo.com'  # Your Outlook/Live email address
-EMAIL_HOST_PASSWORD = 'kbNJUOx5F2KMQWYG'  # Your Outlook/Live account password (or app password if 2FA is enabled)
-ADMIN_EMAIL = 'tech@mdacademy.it'
-
-
-
+# Brevo (Sendinblue) settings
+BREVO_API_KEY = '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'
+DEFAULT_FROM_EMAIL = 'chatgpt6910@gmail.com'
+DEFAULT_FROM_NAME = 'Rental Platform'
+ADMIN_EMAIL = 'zeeshan6910@gmail.com'
 
 
 import os

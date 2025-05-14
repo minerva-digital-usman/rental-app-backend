@@ -1,160 +1,242 @@
-  
 from datetime import timedelta
-from django.core.mail import send_mail
+from django.conf import settings
+from middleware_platform.settings import BREVO_API_KEY, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, ADMIN_EMAIL
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
-from middleware_platform import settings
-  
-  
 class Email:
-      
+    def __init__(self):
+        # Configure API key
+        self.configuration = sib_api_v3_sdk.Configuration()
+        self.configuration.api_key['api-key'] = BREVO_API_KEY
+    
+    def _send_email_via_brevo(self, subject, html_content, recipient_list, sender_name=None, sender_email=None):
+        """
+        Internal method to send email using Brevo API
+        """
+        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+            sib_api_v3_sdk.ApiClient(self.configuration)
+        )
+        
+        sender_name = sender_name or DEFAULT_FROM_NAME
+        sender_email = sender_email or DEFAULT_FROM_EMAIL
+        
+        sender = {"name": sender_name, "email": sender_email}
+        to = [{"email": email} for email in recipient_list]
+        
+        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+            sender=sender,
+            to=to,
+            html_content=html_content,
+            subject=subject
+        )
+        
+        try:
+            api_response = api_instance.send_transac_email(send_smtp_email)
+            return api_response
+        except ApiException as e:
+            print(f"Exception when calling SMTPApi->send_transac_email: {e}\n")
+            return None
+        
+    def send_booking_confirmation_email(self, metadata):
+        """Send booking confirmation email via Brevo"""
+        subject = f"Booking Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
+
+        html_content = f"""
+        <html>
+            <body>
+                <h2>Dear {metadata.get('guest_first_name', 'Valued Customer')} {metadata.get('guest_last_name', '')},</h2>
+                
+                <p>We are delighted to confirm your reservation with <strong>{metadata.get('company_name', 'Our Premium Car Rental Service')}</strong>.</p>
+                <p>Your booking has been successfully processed, and we look forward to serving you.</p>
+                
+                <h3>Booking Summary:</h3>
+                <table style="border-collapse: collapse; width: 100%;">
+                    <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
+                    <tr><td><strong>Vehicle Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')}</td></tr>
+                    <tr><td><strong>Vehicle Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')}</td></tr>
+                    <tr><td><strong>Total Amount:</strong></td><td>€{metadata.get('amount', 'N/A')}</td></tr>
+                </table>
+
+                <p>We appreciate your trust in our services and wish you pleasant travels.</p>
+
+                <p>Warm regards,<br><strong>{metadata.get('company_name', 'The Car Rental Service')}</strong> Team</p>
+            </body>
+        </html>
+        """
+
+        recipient = metadata.get('guest_email')
+
+        if recipient:
+            return self._send_email_via_brevo(
+                subject=subject,
+                html_content=html_content.strip(),
+                recipient_list=[recipient]
+            )
+
     def send_extension_email(self, booking, new_end_time):
         """Send email notification regarding the booking extension."""
         subject = f"Booking Extension Confirmation: {booking.vehicle.model}"
 
-        message = f"""
-    
-    Dear {booking.guest.first_name} {booking.guest.last_name},
+        html_content = f"""
+        <html>
+            <body>
+                <h1>Dear {booking.guest.first_name} {booking.guest.last_name},</h1>
+                
+                <p>We are pleased to confirm that your booking extension has been successfully processed with Our Premium Car Rental Service.</p>
+                <p>We are happy to continue providing you with our services.</p>
+                
+                <h3>Extended Booking Summary:</h3>
+                <hr>
+                <ul>
+                    <li><strong>Booking Reference:</strong> {booking.id}</li>
+                    <li><strong>New Vehicle Return:</strong> {new_end_time.strftime('%B %d, %Y %H:%M')}</li>
+                </ul>
+                <hr>
+                
+                <p>We thank you for your continued trust in our services and wish you safe travels.</p>
+                
+                <p>Warm regards,<br>The Booking Team</p>
+            </body>
+        </html>
+        """
 
-    We are pleased to confirm that your booking extension has been successfully processed with Our Premium Car Rental Service. 
-    We are happy to continue providing you with our services.
-
-    Extended Booking Summary:
-    ============================================
-    - Booking Reference: {booking.id}
-    - New Vehicle Return:  {new_end_time.strftime('%B %d, %Y %H:%M')}
-    ============================================
-
-    We thank you for your continued trust in our services and wish you safe travels.
-
-    Warm regards,  
-    The Booking Team
-        """.strip()
-
-        send_mail(
+        return self._send_email_via_brevo(
             subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[booking.guest.email],
-            fail_silently=False,
+            html_content=html_content,
+            recipient_list=[booking.guest.email]
         )
 
-
-
     def send_pending_conflict_email(self, pending_booking, extending_booking, new_end_time):
-        """Send plain text email notification regarding pending conflict status."""
+        """Send email notification regarding pending conflict status."""
         subject = f"Booking Status Update: {pending_booking.vehicle.model} - Pending Confirmation"
         pending_actual_end_time = pending_booking.end_time - timedelta(minutes=pending_booking.buffer_time)
-        message = f"""
-        Dear {pending_booking.guest.first_name} {pending_booking.guest.last_name},
+        
+        html_content = f"""
+        <html>
+            <body>
+                <h1>Dear {pending_booking.guest.first_name} {pending_booking.guest.last_name},</h1>
+                
+                <p>We would like to inform you that your booking for the {pending_booking.vehicle.model}, originally scheduled from 
+                {pending_booking.start_time.strftime('%B %d, %Y %H:%M')} to 
+                {pending_actual_end_time.strftime('%B %d, %Y %H:%M')}, is currently marked as <strong>pending confirmation</strong> due to a scheduling conflict.</p>
+                
+                <p>A higher-priority booking has been extended and is now scheduled to occupy the vehicle until 
+                {new_end_time.strftime('%B %d, %Y %H:%M')}. As a result, we are reviewing availability and will update you as soon as possible.</p>
+                
+                <p>We sincerely apologize for any inconvenience this may cause. If you wish to modify your reservation or explore alternate options, please don't hesitate to reach out.</p>
+                
+                <p>Thank you for your patience and understanding.</p>
+                
+                <p>Best regards,<br>The Booking Team</p>
+            </body>
+        </html>
+        """
 
-        We would like to inform you that your booking for the {pending_booking.vehicle.model}, originally scheduled from 
-        {pending_booking.start_time.strftime('%B %d, %Y %H:%M')} to 
-        {pending_actual_end_time.strftime('%B %d, %Y %H:%M')}, is currently marked as *pending confirmation* due to a scheduling conflict.
-
-        A higher-priority booking has been extended and is now scheduled to occupy the vehicle until 
-        {new_end_time.strftime('%B %d, %Y %H:%M')}. As a result, we are reviewing availability and will update you as soon as possible.
-
-        We sincerely apologize for any inconvenience this may cause. If you wish to modify your reservation or explore alternate options, please don’t hesitate to reach out.
-
-        Thank you for your patience and understanding.
-
-        Best regards,  
-        The Booking Team
-        """.strip()
-
-        send_mail(
+        return self._send_email_via_brevo(
             subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[pending_booking.guest.email],
-            fail_silently=False,
+            html_content=html_content,
+            recipient_list=[pending_booking.guest.email]
         )
 
     def send_plaintext_cancellation_email(self, canceled_booking, extending_booking, new_end_time):
-        """Send plain text email notification regarding automatic cancellation."""
+        """Send email notification regarding automatic cancellation."""
         subject = f"Booking Cancellation Notification: {canceled_booking.vehicle.model}"
+        
+        html_content = f"""
+        <html>
+            <body>
+                <h1>Dear {canceled_booking.guest.first_name} {canceled_booking.guest.last_name},</h1>
+                
+                <p>We regret to inform you that your booking for the {canceled_booking.vehicle.model}, originally scheduled from 
+                {canceled_booking.start_time.strftime('%B %d, %Y %H:%M')} to 
+                {canceled_booking.end_time.strftime('%B %d, %Y %H:%M')}, has been automatically canceled. This was necessary due to a priority extension of an existing booking.</p>
+                
+                <p>As a result, the vehicle will remain in use until {new_end_time.strftime('%B %d, %Y %H:%M')}.</p>
+                
+                <p>We sincerely apologize for any inconvenience this may cause and understand the impact this may have on your plans. Should you wish to book an alternative vehicle or reschedule your reservation, please feel free to contact us directly.</p>
+                
+                <p>We appreciate your understanding and look forward to assisting you further.</p>
+                
+                <p>Best regards,<br>The Booking Team</p>
+            </body>
+        </html>
+        """
 
-        message = f"""
-        Dear {canceled_booking.guest.first_name} {canceled_booking.guest.last_name},
-
-        We regret to inform you that your booking for the {canceled_booking.vehicle.model}, originally scheduled from 
-        {canceled_booking.start_time.strftime('%B %d, %Y %H:%M')} to 
-        {canceled_booking.end_time.strftime('%B %d, %Y %H:%M')}, has been automatically canceled. This was necessary due to a priority extension of an existing booking.
-
-        As a result, the vehicle will remain in use until {new_end_time.strftime('%B %d, %Y %H:%M')}.
-
-        We sincerely apologize for any inconvenience this may cause and understand the impact this may have on your plans. Should you wish to book an alternative vehicle or reschedule your reservation, please feel free to contact us directly.
-
-        We appreciate your understanding and look forward to assisting you further.
-
-        Best regards,  
-        The Booking Team
-        """.strip()
-
-        send_mail(
+        return self._send_email_via_brevo(
             subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[canceled_booking.guest.email],
-            fail_silently=False,
+            html_content=html_content,
+            recipient_list=[canceled_booking.guest.email]
         )
+
     def notify_admin_of_pending_conflict(self, pending_booking, extending_booking, new_end_time):
         """Send an email to admin when a booking is marked as pending_conflict."""
         subject = f"[Alert] Booking Conflict - {pending_booking.vehicle.model} marked as PENDING"
+        
+        html_content = f"""
+        <html>
+            <body>
+                <h1>Admin Alert</h1>
+                
+                <p>A booking conflict has been detected and the affected booking has been marked as <strong>pending_conflict</strong>.</p>
+                
+                <h3>▶ Affected Booking (now pending):</h3>
+                <ul>
+                    <li><strong>Booking ID:</strong> {pending_booking.id}</li>
+                    <li><strong>Guest:</strong> {pending_booking.guest.first_name} {pending_booking.guest.last_name}</li>
+                    <li><strong>Email:</strong> {pending_booking.guest.email}</li>
+                    <li><strong>Time:</strong> {pending_booking.start_time.strftime('%Y-%m-%d %H:%M')} to {pending_booking.end_time.strftime('%Y-%m-%d %H:%M')}</li>
+                </ul>
+                
+                <h3>▶ Conflicting Extension:</h3>
+                <ul>
+                    <li><strong>Booking ID:</strong> {extending_booking.id}</li>
+                    <li><strong>Guest:</strong> {extending_booking.guest.first_name} {extending_booking.guest.last_name}</li>
+                    <li><strong>Vehicle:</strong> {extending_booking.vehicle.model}</li>
+                    <li><strong>New End Time:</strong> {new_end_time.strftime('%Y-%m-%d %H:%M')}</li>
+                </ul>
+                
+                <p>Please review this conflict and take necessary action if needed.</p>
+                
+                <p>– Booking System</p>
+            </body>
+        </html>
+        """
 
-        message = f"""
-        Admin,
-
-        A booking conflict has been detected and the affected booking has been marked as *pending_conflict*.
-
-        ▶ Affected Booking (now pending):
-        - Booking ID: {pending_booking.id}
-        - Guest: {pending_booking.guest.first_name} {pending_booking.guest.last_name}
-        - Email: {pending_booking.guest.email}
-        - Time: {pending_booking.start_time.strftime('%Y-%m-%d %H:%M')} to {pending_booking.end_time.strftime('%Y-%m-%d %H:%M')}
-
-        ▶ Conflicting Extension:
-        - Booking ID: {extending_booking.id}
-        - Guest: {extending_booking.guest.first_name} {extending_booking.guest.last_name}
-        - Vehicle: {extending_booking.vehicle.model}
-        - New End Time: {new_end_time.strftime('%Y-%m-%d %H:%M')}
-
-        Please review this conflict and take necessary action if needed.
-
-        – Booking System
-        """.strip()
-
-        send_mail(
+        return self._send_email_via_brevo(
             subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[settings.ADMIN_EMAIL],  # Ensure this is set in your Django settings
-            fail_silently=False,
+            html_content=html_content,
+            recipient_list=[ADMIN_EMAIL]
         )
 
     def send_conflict_resolved_email(self, booking):
-        guest = booking.guest
-        hotel = booking.hotel
-        car = booking.vehicle  # or booking.car if you call it differently
-
+        """Send email when a booking conflict has been resolved."""
         subject = "Your Booking Conflict Has Been Resolved"
-        message = (
-            f"Dear {guest.first_name},\n\n"
-            f"Good news! Your booking conflict has been resolved.\n\n"
-            f"Your new hotel: {hotel.name}\n"
-            f"Address: {hotel.location}\n"
-            f"Car: {car.model} ({car.plate_number})\n"
-            f"Booking time: {booking.start_time.strftime('%Y-%m-%d %H:%M')} "
-            f"to {booking.end_time.strftime('%Y-%m-%d %H:%M')}\n\n"
-            f"If you have any questions, please contact support.\n\n"
-            f"Thank you,\nThe Support Team"
-        )
+        
+        html_content = f"""
+        <html>
+            <body>
+                <h1>Dear {booking.guest.first_name},</h1>
+                
+                <p>Good news! Your booking conflict has been resolved.</p>
+                
+                <h3>Booking Details:</h3>
+                <ul>
+                    <li><strong>Hotel:</strong> {booking.hotel.name}</li>
+                    <li><strong>Address:</strong> {booking.hotel.location}</li>
+                    <li><strong>Car:</strong> {booking.vehicle.model} ({booking.vehicle.plate_number})</li>
+                    <li><strong>Booking time:</strong> {booking.start_time.strftime('%Y-%m-%d %H:%M')} to {booking.end_time.strftime('%Y-%m-%d %H:%M')}</li>
+                </ul>
+                
+                <p>If you have any questions, please contact support.</p>
+                
+                <p>Thank you,<br>The Support Team</p>
+            </body>
+        </html>
+        """
 
-        # Use Django's email backend
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [guest.email],
-            fail_silently=False,
+        return self._send_email_via_brevo(
+            subject=subject,
+            html_content=html_content,
+            recipient_list=[booking.guest.email]
         )

@@ -15,6 +15,8 @@ import stripe
 from api.booking.models import Booking
 from payments.models import Payment
 from middleware_platform import settings
+from api.booking.email_service import Email
+
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET = settings.STRIPE_WEBHOOK_SECRET
@@ -294,7 +296,8 @@ def handle_initial_booking_payment(session, metadata):
         payment.save()
 
         # 5. Send confirmation email
-        send_booking_confirmation(metadata)
+        email_client = Email()
+        email_client.send_booking_confirmation_email(metadata)
 
     except Exception as e:
         print(f"Booking creation failed: {e}")
@@ -351,41 +354,6 @@ def handle_extension_payment(session, metadata):
         raise
 
 
-
-def send_booking_confirmation(metadata):
-    """Send booking confirmation email"""
-    subject = f"Booking Confirmation: {metadata.get('company_name', 'Our Car Rental Service')} - Reference #{metadata.get('booking_id', '')}"
-
-    message = f"""
-    Dear {metadata.get('guest_first_name', 'Valued Customer')} {metadata.get('guest_last_name', '')},
-
-    We are delighted to confirm your reservation with {metadata.get('company_name', 'Our Premium Car Rental Service')}. 
-    Your booking has been successfully processed, and we look forward to serving you.
-
-    Booking Summary:
-    ============================================
-    - Booking Reference: {metadata.get('booking_id', 'N/A')}
-    - Vehicle Pickup: {metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')}
-    - Vehicle Return: {metadata.get('return_date', '')} at {metadata.get('return_time', '')}
-    - Total Amount: €{metadata.get('amount', 'N/A')}
-    ============================================
-
-    We appreciate your trust in our services and wish you pleasant travels.
-
-    With warm regards,
-    {metadata.get('company_name', 'The Car Rental Service')} Team
-    """
-
-    recipient = metadata.get('guest_email')
-
-    if recipient:
-        send_mail(
-            subject,
-            message.strip(),
-            settings.DEFAULT_FROM_EMAIL,
-            [recipient],
-            fail_silently=False,
-        )
 
 
 @csrf_exempt
