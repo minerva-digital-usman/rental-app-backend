@@ -114,14 +114,15 @@ JAZZMIN_SETTINGS = {
 
 
 
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'  # SMTP server for Outlook/Live
+EMAIL_HOST = 'smtp-relay.brevo.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'chatgpt6910@gmail.com'  # Your Outlook/Live email address
-EMAIL_HOST_PASSWORD = 'dyxl eipu hnun ctyx'  # Your Outlook/Live account password (or app password if 2FA is enabled)
-DEFAULT_FROM_EMAIL = 'chatgpt6910@gmail.com'
-ADMIN_EMAIL = 'zeeshan6910@gmail.com'
+EMAIL_HOST_USER = '8cfff2001@smtp-brevo.com'  # Your Outlook/Live email address
+EMAIL_HOST_PASSWORD = 'kbNJUOx5F2KMQWYG'  # Your Outlook/Live account password (or app password if 2FA is enabled)
+ADMIN_EMAIL = 'tech@mdacademy.it'
+
 
 
 
