@@ -425,38 +425,6 @@ class BookingConflictAdmin(admin.ModelAdmin):
 
 
 
-    def _send_cancellation_email(self, request, booking):
-        try:
-            # Refresh the booking instance to get updated status
-            booking.refresh_from_db()
-
-            send_mail(
-                subject='Your Booking Has Been Cancelled',
-                message=(
-                    f"Dear {booking.guest.first_name} {booking.guest.last_name},\n\n"
-                    f"Your booking (ID: {booking.id}) has been cancelled due to a conflict resolution.\n\n"
-                    f"Please note that your payment will be refunded within 7 business days.\n\n"
-                    f"If you have any questions, feel free to contact us.\n\n"
-                    f"Best regards,\n"
-                    f"The Team"
-                ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[booking.guest.email],
-                fail_silently=False
-            )
-
-            self.message_user(
-                request,
-                f"Booking {booking.id} cancelled and email sent to {booking.guest.email}"
-            )
-        except Exception as e:
-            self.message_user(
-                request,
-                f"Failed to send email for booking {booking.id}: {str(e)}",
-                level=messages.ERROR
-            )
-
-
     mark_as_cancelled.short_description = "Mark selected conflicts as cancelled (only if pending, and cancel pending bookings)"
 
 class BookingAdmin(admin.ModelAdmin):

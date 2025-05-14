@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pyexpat.errors import messages
 from django.conf import settings
 from middleware_platform.settings import BREVO_API_KEY, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, ADMIN_EMAIL
 import sib_api_v3_sdk
@@ -139,35 +140,58 @@ class Email:
             recipient_list=[pending_booking.guest.email]
         )
 
-    def send_plaintext_cancellation_email(self, canceled_booking, extending_booking, new_end_time):
-        """Send email notification regarding automatic cancellation."""
-        subject = f"Booking Cancellation Notification: {canceled_booking.vehicle.model}"
-        
-        html_content = f"""
-        <html>
-            <body>
-                <h1>Dear {canceled_booking.guest.first_name} {canceled_booking.guest.last_name},</h1>
-                
-                <p>We regret to inform you that your booking for the {canceled_booking.vehicle.model}, originally scheduled from 
-                {canceled_booking.start_time.strftime('%B %d, %Y %H:%M')} to 
-                {canceled_booking.end_time.strftime('%B %d, %Y %H:%M')}, has been automatically canceled. This was necessary due to a priority extension of an existing booking.</p>
-                
-                <p>As a result, the vehicle will remain in use until {new_end_time.strftime('%B %d, %Y %H:%M')}.</p>
-                
-                <p>We sincerely apologize for any inconvenience this may cause and understand the impact this may have on your plans. Should you wish to book an alternative vehicle or reschedule your reservation, please feel free to contact us directly.</p>
-                
-                <p>We appreciate your understanding and look forward to assisting you further.</p>
-                
-                <p>Best regards,<br>The Booking Team</p>
-            </body>
-        </html>
-        """
+    
+    def send_cancellation_email(self, request, booking, new_end_time=None):
+        """Send cancellation email using Brevo when booking is cancelled."""
+        try:
+            booking.refresh_from_db()
 
-        return self._send_email_via_brevo(
-            subject=subject,
-            html_content=html_content,
-            recipient_list=[canceled_booking.guest.email]
-        )
+            subject = f"Booking Cancellation Notification: {booking.vehicle.model}"
+
+            html_content = f"""
+            <html>
+                <body>
+                    <h1>Dear {booking.guest.first_name} {booking.guest.last_name},</h1>
+
+                    <p>We regret to inform you that your booking for the <strong>{booking.vehicle.model}</strong>, originally scheduled from 
+                    {booking.start_time.strftime('%B %d, %Y %H:%M')} to 
+                    {booking.end_time.strftime('%B %d, %Y %H:%M')}, has been cancelled due to a conflict resolution.</p>
+                    
+                    {"<p>The vehicle will now remain in use until " + new_end_time.strftime('%B %d, %Y %H:%M') + ".</p>" if new_end_time else ""}
+                    
+                    <p>Please note that your payment will be refunded within 7 business days.</p>
+
+                    <p>If you have any questions or need assistance with rebooking, feel free to reach out to us.</p>
+
+                    <p>We sincerely apologize for the inconvenience and appreciate your understanding.</p>
+
+                    <p>Best regards,<br>The Booking Team</p>
+                </body>
+            </html>
+            """
+
+            # Send using Brevo
+            email_response = self._send_email_via_brevo(
+                subject=subject,
+                html_content=html_content.strip(),
+                recipient_list=[booking.guest.email]
+            )
+
+            # Django Admin success message
+            self.message_user(
+                request,
+                f"Booking {booking.id} cancelled and email sent to {booking.guest.email}"
+            )
+            return email_response
+
+        except Exception as e:
+            # Django Admin error message
+            self.message_user(
+                request,
+                f"Failed to send email for booking {booking.id}: {str(e)}",
+                level=messages.ERROR
+            )
+            return None
 
     def notify_admin_of_pending_conflict(self, pending_booking, extending_booking, new_end_time):
         """Send an email to admin when a booking is marked as pending_conflict."""
