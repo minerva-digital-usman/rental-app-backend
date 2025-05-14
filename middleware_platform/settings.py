@@ -119,7 +119,7 @@ JAZZMIN_SETTINGS = {
 BREVO_API_KEY = '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'
 DEFAULT_FROM_EMAIL = 'chatgpt6910@gmail.com'
 DEFAULT_FROM_NAME = 'Rental Platform'
-ADMIN_EMAIL = 'zeeshan6910@gmail.com'
+ADMIN_EMAIL = 'tech@mdacademy.it'
 
 
 import os

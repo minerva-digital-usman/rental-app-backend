@@ -301,7 +301,13 @@ class BookingConflictAdmin(admin.ModelAdmin):
                         )
                         # Process refund
                         self._process_refund(request, obj.conflicting_booking)
-                        self._send_cancellation_email(request, obj.conflicting_booking)
+                        email_service = Email()
+                        email_service.send_plaintext_cancellation_email(
+                            canceled_booking=obj.conflicting_booking,
+                            extending_booking=obj.original_booking,
+                            new_end_time=obj.original_booking.end_time
+                        )
+
 
                     if obj.original_booking.status == Booking.STATUS_PENDING_CONFLICT:
                         Booking.objects.filter(id=obj.original_booking.id).update(
@@ -339,7 +345,13 @@ class BookingConflictAdmin(admin.ModelAdmin):
                             status=Booking.STATUS_CANCELLED
                         )
                         self._process_refund(request, conflict.conflicting_booking)
-                        self._send_cancellation_email(request, conflict.conflicting_booking)
+                        email_service = Email()
+                        email_service.send_plaintext_cancellation_email(
+                            canceled_booking=conflict.conflicting_booking,
+                            extending_booking=conflict.original_booking,
+                            new_end_time=conflict.original_booking.end_time
+                        )
+
                         updated_count += 1
 
                     if conflict.original_booking.status == Booking.STATUS_PENDING_CONFLICT:
