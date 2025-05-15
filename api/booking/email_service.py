@@ -182,7 +182,7 @@ class Email:
         )
 
     def send_conflict_resolved_email(self, booking):
-        asd = booking.end_time - timedelta(minutes=booking.buffer_time)
+        end = booking.end_time - timedelta(minutes=booking.buffer_time)
         
         """Send email when a booking conflict has been resolved."""
         subject = "Your Booking Conflict Has Been Resolved"
@@ -199,7 +199,7 @@ class Email:
                     <li><strong>Hotel:</strong> {booking.hotel.name}</li>
                     <li><strong>Address:</strong> {booking.hotel.location}</li>
                     <li><strong>Car:</strong> {booking.vehicle.model} ({booking.vehicle.plate_number})</li>
-                    <li><strong>Booking time:</strong> {booking.start_time.strftime('%Y-%m-%d %H:%M')} to {asd.strftime('%Y-%m-%d %H:%M')}</li>
+                    <li><strong>Booking time:</strong> {booking.start_time.strftime('%Y-%m-%d %H:%M')} to {end.strftime('%Y-%m-%d %H:%M')}</li>
                 </ul>
                 
                 <p>If you have any questions, please contact support.</p>
