@@ -16,7 +16,8 @@ urlpatterns = [
     path('api/', include('api.urls')),
     path('api/upload-driver-license-temp/', upload_driver_license_temp, name='driver-license-upload-temp'),
     path('api/', include('payments.urls')),
-    path('api/booking/extend/<uuid:hotel_id>/<uuid:car_id>/', ExtendBookingView.as_view(), name='extend-booking'),
+    path('api/booking/extend/<uuid:hotel_id>/<uuid:car_id>/', ExtendBookingView.as_view(), name='extend-booking-by-vehicle'),
+    path('api/booking/extend/<uuid:booking_id>/', ExtendBookingView.as_view(), name='extend-booking'),   
     path('api/booking/<uuid:booking_id>/extend/', ExtendBookingView.as_view(), name='extend-booking'),
    path(
         'admin/password_reset/',

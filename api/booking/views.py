@@ -24,11 +24,26 @@ class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
 
 class ExtendBookingView(APIView):
-    def get(self, request, hotel_id, car_id):
+    def get(self, request, *args, **kwargs):
+        # Handle both URL patterns
+        booking_id = kwargs.get('booking_id')
+        hotel_id = kwargs.get('hotel_id')
+        car_id = kwargs.get('car_id')
+        
         try:
-            booking = Booking.objects.get(hotel_id=hotel_id, vehicle_id=car_id)
+            if booking_id:
+                booking = Booking.objects.get(id=booking_id)
+            elif hotel_id and car_id:
+                booking = Booking.objects.get(hotel_id=hotel_id, vehicle_id=car_id)
+            else:
+                return Response(
+                    {"detail": "Invalid parameters"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
             serializer = BookingSerializer(booking)
             return Response(serializer.data, status=status.HTTP_200_OK)
+            
         except Booking.DoesNotExist:
             return Response(
                 {"detail": "Booking not found"},

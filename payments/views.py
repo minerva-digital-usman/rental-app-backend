@@ -29,7 +29,7 @@ def create_checkout_session(request):
             required_fields = [
                 'hotel_name', 'hotel_id', 'pickup_date', 'pickup_time',
                 'vehicle_id', 'guest_first_name', 'guest_last_name',
-                'guest_email', 'guest_phone', 'guest_fiscal_code',
+                'guest_email', 'guest_phone', 'guest_street_address','guest_postal_code','guest_city',
                 'guest_driver_license', 'amount', 'return_date', 'return_time'
             ]
             for field in required_fields:
@@ -55,15 +55,17 @@ def create_checkout_session(request):
                     name=f"{data['guest_first_name']} {data['guest_last_name']}",
                     phone=data['guest_phone'],
                     metadata={
-                        'fiscal_code': data['guest_fiscal_code']
-                    }
+                        'street_address': data['guest_street_address'],
+                        'postal_code': data['guest_postal_code'],
+                        'city': data['guest_city'],
+                      }
                 )
 
             session = stripe.checkout.Session.create(
                 payment_method_types=['card'],
                 line_items=[{
                     'price_data': {
-                        'currency': 'eur',
+                        'currency': 'chf',
                         'product_data': {
                             'name': f'Hotel Name: {data["hotel_name"]}',
                             'description': description,
@@ -86,7 +88,9 @@ def create_checkout_session(request):
                     'guest_last_name': data['guest_last_name'],
                     'guest_email': data['guest_email'],
                     'guest_phone': data['guest_phone'],
-                    'guest_fiscal_code': data['guest_fiscal_code'],
+                    'guest_street_address': data['guest_street_address'],
+                    'guest_postal_code': data['guest_postal_code'],
+                    'guest_city': data['guest_city'],
                     'guest_driver_license': data['guest_driver_license'],
                     'pickup_date': data['pickup_date'],
                     'pickup_time': data['pickup_time'],
@@ -108,7 +112,7 @@ def create_extension_checkout_session(request):
             required_fields = [
                 'booking_id', 'hotel_name', 'hotel_id', 'pickup_date', 'pickup_time',
                 'vehicle_id', 'guest_first_name', 'guest_last_name',
-                'guest_email', 'guest_phone', 'guest_fiscal_code',
+                'guest_email', 'guest_phone', 'guest_street_address','guest_postal_code','guest_city',
                 'amount', 'return_date', 'return_time'
             ]
             for field in required_fields:
@@ -138,7 +142,7 @@ def create_extension_checkout_session(request):
                 payment_method_types=['card'],
                 line_items=[{
                     'price_data': {
-                        'currency': 'eur',
+                        'currency': 'chf',
                         'product_data': {
                             'name': f'Hotel Name: {data["hotel_name"]}',
                             'description': description,
@@ -160,7 +164,9 @@ def create_extension_checkout_session(request):
                     'guest_last_name': data['guest_last_name'],
                     'guest_email': data['guest_email'],
                     'guest_phone': data['guest_phone'],
-                    'guest_fiscal_code': data['guest_fiscal_code'],
+                    'guest_street_address': data['guest_street_address'],
+                    'guest_postal_code': data['guest_postal_code'],
+                    'guest_city': data['guest_city'],
                     'pickup_date': data['pickup_date'],
                     'pickup_time': data['pickup_time'],
                     'return_date': data['return_date'],
@@ -237,7 +243,9 @@ def handle_initial_booking_payment(session, metadata):
             "last_name": metadata['guest_last_name'],
             "email": metadata['guest_email'],
             "phone": metadata['guest_phone'],
-            "fiscal_code": metadata['guest_fiscal_code'],
+            "street_address": metadata['guest_street_address'],
+            "postal_code": metadata['guest_postal_code'],
+            "city": metadata['guest_city'],
             "driver_license": metadata['guest_driver_license']
         }
     }
@@ -294,10 +302,13 @@ def handle_initial_booking_payment(session, metadata):
                 payment.payment_method_last4 = payment_method.card.last4
 
         payment.save()
+        extension_link = f"{settings.BASE_URL_FRONTEND}/extend-booking-email/{booking_id}"
+        metadata['extension_link'] = extension_link
 
         # 5. Send confirmation email
         email_client = Email()
         email_client.send_booking_confirmation_email(metadata)
+        email_client.send_booking_notification_to_admin(metadata)
 
     except Exception as e:
         print(f"Booking creation failed: {e}")

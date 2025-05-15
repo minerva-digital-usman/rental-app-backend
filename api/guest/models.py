@@ -19,7 +19,9 @@ class Guest(models.Model):
     last_name = models.CharField(max_length=100)
     email = models.EmailField(blank=False, null=False)
     phone = models.CharField(max_length=20, blank=False, null=False)
-    fiscal_code = models.CharField(max_length=50, blank=True, null=True)
+    street_address = models.CharField("Via", max_length=255, blank=True, null=True)
+    postal_code = models.CharField("CAP", max_length=20, blank=True, null=True)
+    city = models.CharField("Località", max_length=100, blank=True, null=True)
 
     driver_license = models.CharField(max_length=100)
 

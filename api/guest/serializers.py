@@ -13,6 +13,8 @@ class GuestSerializer(serializers.ModelSerializer):
             'last_name',
             'email',
             'phone',
-            'fiscal_code',
+            'street_address',
+            'postal_code',
+            'city',
             'driver_license',
         ]

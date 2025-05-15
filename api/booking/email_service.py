@@ -56,10 +56,12 @@ class Email:
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
                     <tr><td><strong>Vehicle Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')}</td></tr>
                     <tr><td><strong>Vehicle Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')}</td></tr>
-                    <tr><td><strong>Total Amount:</strong></td><td>€{metadata.get('amount', 'N/A')}</td></tr>
+                    <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
                 <p>We appreciate your trust in our services and wish you pleasant travels.</p>
+                
+                <p>If you need to extend your booking later, you can do so here: <a href="{metadata.extension_link }">Extend Booking</a></p>
 
                 <p>Warm regards,<br><strong>{metadata.get('company_name', 'The Car Rental Service')}</strong> Team</p>
             </body>
@@ -74,6 +76,44 @@ class Email:
                 html_content=html_content.strip(),
                 recipient_list=[recipient]
             )
+    from django.conf import settings
+
+    def send_booking_notification_to_admin(self, metadata):
+        """Send booking confirmation notification email to admin via Brevo"""
+        subject = f"New Booking Confirmed: Reference #{metadata.get('booking_id', '')}"
+
+        html_content = f"""
+        <html>
+            <body>
+                <h2>New Booking Confirmed</h2>
+                
+                <p>A new booking has been made on <strong>{metadata.get('company_name', 'Our Car Rental Service')}</strong>.</p>
+                
+                <h3>Booking Details:</h3>
+                <table style="border-collapse: collapse; width: 100%;">
+                    <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
+                    <tr><td><strong>Guest Name:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
+                    <tr><td><strong>Guest Email:</strong></td><td>{metadata.get('guest_email', 'N/A')}</td></tr>
+                    <tr><td><strong>Vehicle Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')}</td></tr>
+                    <tr><td><strong>Vehicle Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')}</td></tr>
+                    <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
+                </table>
+                
+                <p>Please review the booking and take any necessary actions.</p>
+                
+                <p>Regards,<br><strong>{metadata.get('company_name', 'The Car Rental Service')}</strong> System</p>
+            </body>
+        </html>
+        """
+
+        admin_email = settings.ADMIN_EMAIL
+
+        return self._send_email_via_brevo(
+            subject=subject,
+            html_content=html_content.strip(),
+            recipient_list=[admin_email]
+        )
+
 
     def send_extension_email(self, booking, new_end_time):
         """Send email notification regarding the booking extension."""

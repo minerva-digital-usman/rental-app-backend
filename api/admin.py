@@ -151,8 +151,9 @@ class CarAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 class GuestAdmin(admin.ModelAdmin):
-    list_display = ('first_name', 'last_name', 'email', 'phone', 'fiscal_code', 'driver_license_image')
-    search_fields = ('first_name', 'last_name', 'email','fiscal_code')
+    list_display = ('first_name', 'last_name', 'email', 'phone', 'street_address','city', 'postal_code', 'driver_license_image')
+    search_fields = ('first_name', 'last_name', 'email')
+    list_filter = ('city', 'postal_code')
     
     def driver_license_image(self, obj):
         if obj.driver_license:
@@ -535,7 +536,7 @@ class HotelAdmin(admin.ModelAdmin):
     def total_earnings(self, obj):
         # Aggregate payments based on the hotel ID
         total = Payment.objects.filter(booking__hotel=obj).aggregate(Sum('amount'))['amount__sum']
-        return f"€{total:.2f}" if total else '€0.00'
+        return f"CHF {total:.2f}" if total else 'CHF 0.00'
     total_earnings.short_description = 'Total Earnings'
 
     def save_model(self, request, obj, form, change):
