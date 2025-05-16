@@ -12,11 +12,15 @@ class Booking(models.Model):
     STATUS_ACTIVE = 'active'
     STATUS_CANCELLED = 'cancelled'
     STATUS_PENDING_CONFLICT = 'pending_conflict'
+    STATUS_COMPLETED = 'completed'  # New status
+
 
     STATUS_CHOICES = [
         (STATUS_ACTIVE, 'Active'),
         (STATUS_CANCELLED, 'Cancelled'),
         (STATUS_PENDING_CONFLICT, 'Pending Conflict'),
+        (STATUS_COMPLETED, 'Completed'),  # Add it here
+
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
