@@ -4,6 +4,7 @@ from django.db import models
 import stripe
 from api.booking.models import Booking
 from api.garage.models import Car
+from api.booking.email_service import Email
 from middleware_platform import settings
 from payments.models import Payment
 
@@ -103,52 +104,41 @@ class TrafficFine(models.Model):
         
         
     def send_fine_notification(self):
-        """Send email notification about the traffic fine with an image attachment"""
-        subject = f"Traffic Fine Notification for Booking {self.booking.id}"
+        """Send traffic fine notification using Brevo"""
         guest = self.booking.guest
-        
-        # Email body message with attachment note
-        message = f"""
-        Dear {guest.first_name} {guest.last_name},
-        
-        We would like to inform you that a traffic fine has been charged to your payment method on file.
-        
-        Fine Details:
-        ============================================
-        - Booking Reference: {self.booking.id}
-        - Amount: €{self.amount}
-        - Reason: {self.reason}
-        - Date Charged: {self.charged_payment.created_at.strftime('%Y-%m-%d %H:%M')}
-        ============================================
-        
-        Please find the traffic violation documentation attached below for your reference.
-        
-        If you believe this is an error or have any questions about this charge, 
-        please contact our support team within 7 days of receiving this notification.
-        
-        Best regards,
-        The Car Rental Service Team
+        subject = f"Traffic Fine Notification for Booking {self.booking.id}"
+
+        html_content = f"""
+        <html>
+            <body>
+                <h2>Dear {guest.first_name} {guest.last_name},</h2>
+                
+                <p>We would like to inform you that a traffic fine has been charged to your payment method on file.</p>
+                
+                <h3>Fine Details:</h3>
+                <ul>
+                    <li><strong>Booking Reference:</strong> {self.booking.id}</li>
+                    <li><strong>Amount:</strong> €{self.amount}</li>
+                    <li><strong>Reason:</strong> {self.reason}</li>
+                    <li><strong>Date Charged:</strong> {self.charged_payment.created_at.strftime('%Y-%m-%d %H:%M')}</li>
+                </ul>
+                
+                <p>Please find the traffic violation documentation attached in your booking dashboard or contact support for further information.</p>
+                
+                <p>If you believe this is an error or have any questions, please contact our support team within 7 days.</p>
+                
+                <p>Best regards,<br><strong>The Car Rental Service Team</strong></p>
+            </body>
+        </html>
         """
-        
-        # Create an email message using Django's EmailMessage
-        email = EmailMessage(
-            subject,
-            message.strip(),
-            settings.DEFAULT_FROM_EMAIL,
-            [guest.email],
-        )
-        
-        # Attach the traffic fine image (challan)
-        if self.image:
-            with self.image.open('rb') as file:
-                email.attach(
-                    filename=self.image.name,
-                    content=file.read(),
-                    mimetype='image/jpeg'  # or appropriate content type
-                )
-        
-        # Send the email
+
+        # Send the email using Brevo
         try:
-            email.send(fail_silently=False)
+            email_client = Email()
+            email_client._send_email_via_brevo(
+                subject=subject,
+                html_content=html_content.strip(),
+                recipient_list=[guest.email]
+            )
         except Exception as e:
-            raise ValueError(f"Error sending fine notification: {str(e)}")
+            raise ValueError(f"Error sending fine notification via Brevo: {str(e)}")
