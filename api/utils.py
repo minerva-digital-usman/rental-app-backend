@@ -2,6 +2,8 @@ import qrcode
 from io import BytesIO
 from django.core.files.base import ContentFile
 
+from rental_company.models import RentalCompany
+
 def generate_qr_code(data):
     """
     Generates a QR code image for the given data.
@@ -21,3 +23,7 @@ def generate_qr_code(data):
     img.save(buffer, format="PNG")
     buffer.seek(0)
     return ContentFile(buffer.getvalue())
+
+
+# utils/email_config.py
+

@@ -5,6 +5,8 @@ from middleware_platform.settings import BREVO_API_KEY, DEFAULT_FROM_EMAIL, DEFA
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 
+from api.rental_company.utils.email_config import get_admin_email
+
 class Email:
     def __init__(self):
         # Configure API key
@@ -106,7 +108,7 @@ class Email:
         </html>
         """
 
-        admin_email = settings.ADMIN_EMAIL
+        admin_email = get_admin_email()
 
         return self._send_email_via_brevo(
             subject=subject,
