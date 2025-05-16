@@ -51,7 +51,7 @@ class TrafficFine(models.Model):
             # Create and confirm PaymentIntent
             payment_intent = stripe.PaymentIntent.create(
                 amount=int(float(self.amount) * 100),
-                currency='eur',
+                currency='chf',
                 customer=payment.stripe_customer_id,
                 payment_method=payment.stripe_payment_method_id,
                 off_session=True,
