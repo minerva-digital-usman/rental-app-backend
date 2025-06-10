@@ -7,6 +7,8 @@ urlpatterns = [
     path('stripe/webhook/', views.stripe_webhook, name='stripe_webhook'),
     path('stripe-session/<str:session_id>/', views.stripe_session_detail),
     path('create-checkout-session/', views.create_checkout_session, name='create_checkout_session'),
+    path('payments/amount/<uuid:booking_id>/', views.PaymentAmountAPIView.as_view(), name='payment-amount'),
+
     path('create-extension-checkout-session/', views.create_extension_checkout_session, name='create_extension_checkout_session'),
     # path('charge-fine/<uuid:booking_id>/', views.charge_fine, name='charge_fine'),
     

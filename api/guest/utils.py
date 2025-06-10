@@ -9,7 +9,7 @@ from datetime import datetime
 
 
 # Create the EasyOCR reader (reuse it for performance)
-reader = easyocr.Reader(['en'], gpu=False)  # Set gpu=True if you have a CUDA GPU
+reader = easyocr.Reader(['en', 'de', 'fr', 'it'], gpu=False)  # Set gpu=True if you have a CUDA GPU
 def extract_expiry_date(text: str) -> Optional[str]:
     # First try to find Italian license format with 4a and 4b markers
     italian_pattern = r"4a\.\s*(\d{2}/\d{2}/\d{4}).*?4b\.\s*(\d{2}/\d{2}/\d{4})"
@@ -23,7 +23,10 @@ def extract_expiry_date(text: str) -> Optional[str]:
     date_pattern = r"\b\d{2}-[A-Za-z]{3}-\d{2}\b|\b\d{2}-[A-Za-z]{3}-\d{4}\b|\b\d{2}/\d{2}/\d{4}\b|\b\d{4}-\d{2}-\d{2}\b"
     dates = [(m.group(), m.start(), m.end()) for m in re.finditer(date_pattern, text, re.IGNORECASE)]
     
-    expiry_keywords = ["expiry date", "expires", "valid until", "expiration date", "4b"]
+    expiry_keywords = [
+        "expiry date", "expires", "valid until", "expiration date", "4b",
+        "gültig bis", "valable jusqu", "valido fino"
+    ]
     
     for keyword in expiry_keywords:
         keyword_pos = text.lower().find(keyword)
@@ -36,11 +39,14 @@ def extract_expiry_date(text: str) -> Optional[str]:
 def validate_driver_license(text: str) -> bool:
     text_lower = text.lower()
     # Add Italian-specific keywords
-    keywords = ['driver', 'license', 'dl', 'sex', 'dob', 'class', 
-                'expiry date', 'exp', '4a', '4b', 'patente', 'guida', 
-                'italiana', 'italiano']
+    keywords = [
+        'driver', 'license', 'dl', 'sex', 'dob', 'class', 'expiry date', 'exp',
+        '4a', '4b', 'patente', 'guida', 'italiana', 'italiano',
+        'führerausweis', 'permis de conduire', 'patente di guida',  # CH langs
+        'confédération suisse', 'schweizerische eidgenossenschaft', 'confederazione svizzera'
+    ]
     match_count = sum(1 for keyword in keywords if keyword in text_lower)
-    return match_count >= 2
+    return match_count <= 0
 
 
 def is_driver_license_expired(expiry_date: str) -> Tuple[bool, Optional[datetime]]:

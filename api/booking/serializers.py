@@ -102,7 +102,18 @@ def validate(self, data):
     return data
 
 
+import uuid
 
+class CancelBookingSerializer(serializers.Serializer):
+    booking_id = serializers.UUIDField()
+    metadata = serializers.DictField(required=False)
+    
+    def validate_booking_id(self, value):
+        try:
+            return uuid.UUID(str(value))
+        except ValueError:
+            raise serializers.ValidationError("Invalid booking ID format")
+    
 class ExtendBookingSerializer(serializers.ModelSerializer):
     new_end_time = serializers.DateTimeField(required=True)
 

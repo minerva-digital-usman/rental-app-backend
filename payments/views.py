@@ -1,6 +1,8 @@
-from datetime import timezone
+import datetime as dt
+from datetime import datetime
 import json
 import os
+from venv import logger
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, JsonResponse
 import requests
@@ -16,21 +18,35 @@ from api.booking.models import Booking
 from payments.models import Payment
 from middleware_platform import settings
 from api.booking.email_service import Email
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET = settings.STRIPE_WEBHOOK_SECRET
-
+class PaymentAmountAPIView(APIView):
+    def get(self, request, booking_id):
+        payment = Payment.objects.filter(
+            booking_id=booking_id,
+            status='succeeded',
+            payment_type='initial'
+        ).order_by('-created_at').first()
+        
+        if not payment:
+            return Response({"detail": "No successful payment found for booking."}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({"amount": str(payment.amount)}, status=status.HTTP_200_OK)
 @csrf_exempt
 def create_checkout_session(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             required_fields = [
-                'hotel_name', 'hotel_id', 'pickup_date', 'pickup_time',
+                'hotel_name','hotel_email' ,'hotel_id','hotel_location' ,'pickup_date', 'pickup_time', 'car_model',
                 'vehicle_id', 'guest_first_name', 'guest_last_name',
                 'guest_email', 'guest_phone', 'guest_street_address','guest_postal_code','guest_city',
-                'guest_driver_license', 'amount', 'return_date', 'return_time'
+                'guest_driver_license', 'amount', 'return_date', 'return_time','company_name', 'company_email', 'company_phone'
             ]
             for field in required_fields:
                 if field not in data:
@@ -39,6 +55,9 @@ def create_checkout_session(request):
             unit_amount = int(float(data['amount']) * 100)
             description = (
                 f"Name: {data['guest_first_name']} {data['guest_last_name']}, "
+                # f"car: {data['car_model']}, "
+                # f"Company: {data['company_name']}, {data['company_email']}, {data['company_phone']}, "
+                # f"Hotel: {data['hotel_location']}, "
                 f"Pickup: {data['pickup_date']} {data['pickup_time']}, "
                 f"Return: {data['return_date']} {data['return_time']}"
             )
@@ -83,6 +102,8 @@ def create_checkout_session(request):
                 },
                 metadata={
                     'hotel_id': data['hotel_id'],
+                    'hotel_email':data['hotel_email'],
+                    'hotel_location': data['hotel_location'],
                     'vehicle_id': data['vehicle_id'],
                     'guest_first_name': data['guest_first_name'],
                     'guest_last_name': data['guest_last_name'],
@@ -96,7 +117,12 @@ def create_checkout_session(request):
                     'pickup_time': data['pickup_time'],
                     'return_date': data['return_date'],
                     'return_time': data['return_time'],
-                    'amount': data['amount']
+                    'amount': data['amount'],
+                    'company_name': data['company_name'],
+                    'company_email': data['company_email'],
+                    'company_phone': data['company_phone'],
+                    'car_model': data['car_model'],
+                    'terms_url': 'https://drive.google.com/file/d/1kCTjFnZ-c8OIq4-UTZTSE2wqdQGIJhJC/preview',
                 }
             )
             return JsonResponse({'id': session.id})
@@ -110,8 +136,9 @@ def create_extension_checkout_session(request):
         try:
             data = json.loads(request.body)
             required_fields = [
-                'booking_id', 'hotel_name', 'hotel_id', 'pickup_date', 'pickup_time',
-                'vehicle_id', 'guest_first_name', 'guest_last_name',
+                'booking_id', 'hotel_name', 'hotel_id','hotelEmail', 'pickup_date', 'pickup_time',
+                'vehicle_id', 'guest_first_name', 'guest_last_name', 'guest_street_address','car_model','companyName',
+                'companyEmail', 'companyPhone', 'hotelLocation',
                 'guest_email', 'guest_phone', 'guest_street_address','guest_postal_code','guest_city',
                 'amount', 'return_date', 'return_time'
             ]
@@ -124,6 +151,12 @@ def create_extension_checkout_session(request):
                 f"Extension for Booking ID: {data['booking_id']}, "
                 f"Name: {data['guest_first_name']} {data['guest_last_name']}, "
                 f"New Return: {data['return_date']} {data['return_time']}"
+                # f"Car Model: {data['car_model']}, "
+                # f"Company: {data['companyName']}, {data['companyEmail']}, {data['companyPhone']}, "
+                # f"Hotel: {data['hotelLocation']}, "
+                # f"original return: {data['original_return_time']}"
+                
+                
             )
 
             # Get the booking to retrieve the customer ID
@@ -159,6 +192,13 @@ def create_extension_checkout_session(request):
                 metadata={
                     'booking_id': str(data['booking_id']),
                     'hotel_id': data['hotel_id'],
+                    'hotel_name': data['hotel_name'],
+                     'hotel_email':data['hotelEmail'],
+                     'company_name': data['companyName'],
+                    'company_email': data['companyEmail'],
+                    'company_phone': data['companyPhone'],
+                    'car_model': data['car_model'],
+                    'hotel_location': data['hotelLocation'],
                     'vehicle_id': data['vehicle_id'],
                     'guest_first_name': data['guest_first_name'],
                     'guest_last_name': data['guest_last_name'],
@@ -170,8 +210,12 @@ def create_extension_checkout_session(request):
                     'pickup_date': data['pickup_date'],
                     'pickup_time': data['pickup_time'],
                     'return_date': data['return_date'],
+                    'original_return_time': data.get('original_return_time', ''),  # Optional field
+                    'original_return_date': data.get('original_return_date', ''),  # Optional field
                     'return_time': data['return_time'],
-                    'amount': data['amount']
+                    'amount': data['amount'],
+                    'terms_url': 'https://drive.google.com/file/d/1kCTjFnZ-c8OIq4-UTZTSE2wqdQGIJhJC/preview',
+
                 }
             )
             return JsonResponse({'id': session.id})
@@ -308,6 +352,7 @@ def handle_initial_booking_payment(session, metadata):
         # 5. Send confirmation email
         email_client = Email()
         email_client.send_booking_confirmation_email(metadata)
+        email_client.send_booking_confirmation_email_to_hotel(metadata)
         email_client.send_booking_notification_to_admin(metadata)
 
     except Exception as e:
@@ -320,8 +365,15 @@ def handle_extension_payment(session, metadata):
     booking_id = metadata['booking_id']
     return_date = metadata['return_date']
     return_time = metadata['return_time']
-    new_end_time = f"{return_date} {return_time}:00"
-    
+    new_end_time = f"{return_date} {return_time}:00"  # e.g., "2025-06-09 15:30:00"
+
+# Convert to datetime object
+    try:
+        raw_new_end_time = datetime.strptime(new_end_time, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        logger.error("Invalid date/time format: %s", new_end_time)
+        return Response({"detail": "Invalid date/time format."}, status=400)
+        
     try:
         # 1. Update booking extension
         response = requests.patch(
@@ -356,9 +408,15 @@ def handle_extension_payment(session, metadata):
                     payment.payment_method_last4 = payment_method.card.last4
 
         payment.save()
+        extension_link = f"{settings.BASE_URL_FRONTEND}/extend-booking-email/{booking_id}"
+        metadata['extension_link'] = extension_link
 
         # 4. Send extension confirmation email
         # send_extension_confirmation(booking, metadata)
+        email_service = Email()
+        email_service.send_extension_email(metadata, raw_new_end_time)
+        email_service.send_extension_email_to_hotel(metadata, raw_new_end_time)
+        email_service.send_extension_email_to_admin(metadata, raw_new_end_time)        
         
     except Exception as e:
         print(f"Error processing extension for booking {booking_id}: {e}")

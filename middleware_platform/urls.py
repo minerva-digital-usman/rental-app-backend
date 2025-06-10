@@ -5,7 +5,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 
-from api.booking.views import ExtendBookingView, PriceCalculationView
+from api.booking.views import CancelBookingAPIView, ExtendBookingView, PriceCalculationView
 from api.guest.views import  upload_driver_license_temp
 from auth.forms import StrictAdminPasswordResetForm
 from api.hotel.views import nearby_hotels_view
@@ -13,6 +13,8 @@ from auth.views import CustomAdminPasswordResetView
 
 
 urlpatterns = [
+    path('api/bookings/cancel/', CancelBookingAPIView.as_view(), name='cancel-booking'),
+
     path('api/', include('api.urls')),
     path('api/upload-driver-license-temp/', upload_driver_license_temp, name='driver-license-upload-temp'),
     path('api/', include('payments.urls')),
