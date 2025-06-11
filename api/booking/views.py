@@ -119,7 +119,7 @@ class ExtendBookingView(APIView):
                         
 
                         # Send plain text notification
-                        # email_service.send_pending_conflict_email(conflicting_booking, booking, buffered_new_end_time)
+                        email_service.send_pending_conflict_email(conflicting_booking, booking, buffered_new_end_time)
 
                         # Mark as pending_conflict instead of deleting
                         conflicting_booking.status = Booking.STATUS_PENDING_CONFLICT
@@ -133,7 +133,7 @@ class ExtendBookingView(APIView):
                         )
 
                         # Send notifications
-                        # email_service.notify_admin_of_pending_conflict(conflicting_booking, booking, buffered_new_end_time)
+                        email_service.notify_admin_of_pending_conflict(conflicting_booking, booking, buffered_new_end_time)
 
                     # Update the original booking after cancellations
                     booking.end_time = buffered_new_end_time
