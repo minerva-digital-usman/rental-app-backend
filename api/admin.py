@@ -19,6 +19,7 @@ from api.garage.models import Car
 from api.linkCarandHotel.models import CarHotelLink
 from api.bookingConflict.models import BookingConflict
 from api.booking.email_service import Email
+from middleware_platform.settings import BASE_URL_BACKEND
 from payments.challan.models import TrafficFine
 from payments.models import  Payment
 
@@ -233,7 +234,7 @@ class BookingConflictForm(forms.ModelForm):
 
     def build_nearby_hotels_url(self, lat, lon, start_time, end_time):
         return (
-            f'http://localhost:8000/hotels/nearby/?lat={lat}&lon={lon}'
+            f'{BASE_URL_BACKEND}/hotels/nearby/?lat={lat}&lon={lon}'
             f'&radius=2&start_time={start_time.strftime("%Y-%m-%dT%H:%M:%SZ")}'
             f'&end_time={end_time.strftime("%Y-%m-%dT%H:%M:%SZ")}'
         )
