@@ -222,7 +222,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Where collectstatic puts files
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),  # Your original static files directory
+    os.path.join(BASE_DIR, 'static', 'dist'),  # Your original static files directory
 ]
 
 # Media files (user-uploaded content)
