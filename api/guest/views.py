@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
 
-from api.guest.utils import is_driver_license_easyocr
+from guest.utils import is_driver_license_easyocr
 
 
 class GuestViewSet(viewsets.ModelViewSet):
