@@ -161,48 +161,51 @@ class ExtendBookingView(APIView):
 
 
 class PriceCalculationView(APIView):
-
     def post(self, request, *args, **kwargs):
         serializer = PriceCalculationSerializer(data=request.data)
 
         if serializer.is_valid():
             vehicle_id = serializer.validated_data['vehicle']
-            start_time = serializer.validated_data['start_time']
-            end_time = serializer.validated_data['end_time']
+            original_end_time = serializer.validated_data.get('original_end_time')  # NEW
+            new_end_time = serializer.validated_data['end_time']
 
             try:
                 car = Car.objects.get(id=vehicle_id)
             except Car.DoesNotExist:
                 return Response({"error": "Car not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Time calculation
-            total_price = 0.0
-            current_time = start_time
+            # If extending, calculate ONLY the additional time (from original_end_time to new_end_time)
+            if original_end_time and original_end_time < new_end_time:
+                calculation_start = original_end_time
+                is_extension = True
+            else:
+                calculation_start = serializer.validated_data['start_time']  # Default for new bookings
+                is_extension = False
 
-            while current_time < end_time:
-                # Determine the end of the current 24-hour block
-                block_end_time = min(current_time + timedelta(hours=24), end_time)
+            # Calculate price ONLY for the extension period
+            total_price = 0.0
+            current_time = calculation_start
+
+            while current_time < new_end_time:
+                block_end_time = min(current_time + timedelta(hours=24), new_end_time)
                 hours_in_block = (block_end_time - current_time).total_seconds() / 3600
 
-                # Price per block
                 block_price = hours_in_block * car.price_per_hour
                 block_price = min(block_price, car.max_price_per_day)  # Apply daily cap
-
                 total_price += block_price
-                current_time = block_end_time  # Move to the next 24-hour block
+                current_time = block_end_time
 
-            duration = (end_time - start_time).total_seconds() / 3600
+            duration = (new_end_time - calculation_start).total_seconds() / 3600
 
             return Response({
                 'total_price': round(total_price, 2),
                 'duration_hours': round(duration, 2),
-                'vehicle': car.model,
-                'vehicle_plate': car.plate_number,
+                'is_extension': is_extension,  # Tell frontend this is an extension
             }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
+from pytz import timezone as pytz_timezone
 
 class CancelBookingAPIView(APIView):
     def post(self, request):
@@ -213,8 +216,23 @@ class CancelBookingAPIView(APIView):
         booking_id = serializer.validated_data['booking_id']
         booking = get_object_or_404(Booking, id=booking_id)
 
-        now = timezone.now()
+        rome_tz = pytz_timezone('Europe/Rome')
+
+
         start_time = booking.start_time
+
+        # Remove timezone info (make it naive)
+        start_time_naive = start_time.replace(tzinfo=None)
+
+        # Localize naive datetime as Rome time WITHOUT changing the time
+        start_time_rome = rome_tz.localize(start_time_naive)
+
+        now = timezone.now().astimezone(rome_tz)
+        
+        
+        if now >= start_time_rome:
+            return Response({"detail": "Cannot cancel a booking that has already started."}, status=status.HTTP_400_BAD_REQUEST)
+        
         time_until_start = start_time - now
 
         # Determine refund policy
@@ -274,3 +292,6 @@ class CancelBookingAPIView(APIView):
             message = "Booking cancelled. No refund as per policy."
 
         return Response({"detail": message})
+
+
+

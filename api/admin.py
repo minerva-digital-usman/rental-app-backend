@@ -108,23 +108,38 @@ class TrafficFineAdmin(admin.ModelAdmin):
     charge_selected_fines.short_description = "Charge selected traffic fines"
 
 # --- Form Definitions ---
+from django import forms
+
 class BookingForm(forms.ModelForm):
+    start_time = forms.DateTimeField(
+        input_formats=['%Y-%m-%d %H:%M'],
+        widget=forms.TextInput(attrs={
+            'class': 'vDateTimeField flatpickr-start',
+            'autocomplete': 'off',
+        })
+    )
+    end_time = forms.DateTimeField(
+        input_formats=['%Y-%m-%d %H:%M'],
+        widget=forms.TextInput(attrs={
+            'class': 'vDateTimeField flatpickr-end',
+            'autocomplete': 'off',
+        })
+    )
+
     class Meta:
         model = Booking
         fields = '__all__'
 
-    start_time = forms.DateTimeField(
-        widget=forms.DateTimeInput(attrs={
-            'type': 'datetime-local',
-            'step': '900'  # 15 minutes
-        })
-    )
-    end_time = forms.DateTimeField(
-        widget=forms.DateTimeInput(attrs={
-            'type': 'datetime-local',
-            'step': '900'
-        })
-    )
+    class Media:
+        css = {
+            'all': ('https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',)
+        }
+        js = (
+            'https://cdn.jsdelivr.net/npm/flatpickr',
+            'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js',
+            '/static/js/flatpickr_24h.js',
+            # '/static/js/booking_admin.js',  # Your new JavaScript file
+        )
 
 # --- ModelAdmin Classes ---
 class RentalCompanyAdmin(admin.ModelAdmin):
@@ -443,15 +458,25 @@ class BookingConflictAdmin(admin.ModelAdmin):
 
 class BookingAdmin(admin.ModelAdmin):
     form = BookingForm
-    list_display = ('id', 'guest_full_name', 'vehicle', 'hotel', 'start_time', 'end_time', 'buffer_time', 'status')
-    list_filter = ('hotel', 'vehicle', 'status')  # Date filtering
+    list_display = (
+        'id', 'guest_full_name', 'vehicle', 'hotel',
+        'start_time_24', 'end_time_24', 'buffer_time', 'status'
+    )
+    list_filter = ('hotel', 'vehicle', 'status')
     search_fields = ('guest__first_name', 'guest__last_name','vehicle__plate_number')
-    date_hierarchy = 'start_time'  # Optional date drilldown
+    date_hierarchy = 'start_time'
 
     def guest_full_name(self, obj):
         return f"{obj.guest.first_name} {obj.guest.last_name}"
     guest_full_name.short_description = 'Guest'
 
+    def start_time_24(self, obj):
+        return localtime(obj.start_time).strftime('%Y-%m-%d %H:%M')
+    start_time_24.short_description = 'Start Time'
+
+    def end_time_24(self, obj):
+        return localtime(obj.end_time).strftime('%Y-%m-%d %H:%M')
+    end_time_24.short_description = 'End Time'
 
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ('id', 'guest_name', 'amount', 'currency', 'status', 'created_at', 'hotel_name', 'hotel_id')

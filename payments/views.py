@@ -14,6 +14,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.conf import settings
 import stripe
+from django.db.models import Sum
 from api.booking.models import Booking
 from payments.models import Payment
 from middleware_platform import settings
@@ -25,18 +26,19 @@ from rest_framework import status
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET = settings.STRIPE_WEBHOOK_SECRET
+
 class PaymentAmountAPIView(APIView):
     def get(self, request, booking_id):
-        payment = Payment.objects.filter(
+        total_amount = Payment.objects.filter(
             booking_id=booking_id,
-            status='succeeded',
-            payment_type='initial'
-        ).order_by('-created_at').first()
+            status='succeeded'
+        ).aggregate(total=Sum('amount'))['total']
         
-        if not payment:
-            return Response({"detail": "No successful payment found for booking."}, status=status.HTTP_404_NOT_FOUND)
+        if total_amount is None:
+            return Response({"detail": "No successful payments found for booking."}, status=status.HTTP_404_NOT_FOUND)
         
-        return Response({"amount": str(payment.amount)}, status=status.HTTP_200_OK)
+        return Response({"amount": str(total_amount)}, status=status.HTTP_200_OK)
+    
 @csrf_exempt
 def create_checkout_session(request):
     if request.method == 'POST':
