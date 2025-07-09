@@ -47,7 +47,7 @@ def create_checkout_session(request):
             required_fields = [
                 'hotel_name','hotel_email' ,'hotel_id','hotel_location' ,'pickup_date', 'pickup_time', 'car_model',
                 'vehicle_id', 'guest_first_name', 'guest_last_name',
-                'guest_email', 'guest_phone', 'guest_street_address','guest_postal_code','guest_city',
+                'guest_email', 'guest_phone', 'guest_street_address', 'guest_no_set','guest_postal_code','guest_city',
                 'guest_driver_license', 'amount', 'return_date', 'return_time','company_name', 'company_email', 'company_phone'
             ]
             for field in required_fields:
@@ -112,6 +112,7 @@ def create_checkout_session(request):
                     'guest_email': data['guest_email'],
                     'guest_phone': data['guest_phone'],
                     'guest_street_address': data['guest_street_address'],
+                    'guest_no_set': data['guest_no_set'],
                     'guest_postal_code': data['guest_postal_code'],
                     'guest_city': data['guest_city'],
                     'guest_driver_license': data['guest_driver_license'],
