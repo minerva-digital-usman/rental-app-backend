@@ -45,7 +45,7 @@ def create_checkout_session(request):
         try:
             data = json.loads(request.body)
             required_fields = [
-                'hotel_name','hotel_email' ,'hotel_id','hotel_location' ,'pickup_date', 'pickup_time', 'car_model',
+                'hotel_name','hotel_email' ,'hotel_id','hotel_location' ,'pickup_date', 'pickup_time', 'car_model','car_plate',
                 'vehicle_id', 'guest_first_name', 'guest_last_name',
                 'guest_email', 'guest_phone', 'guest_street_address', 'guest_no_set','guest_postal_code','guest_city',
                 'guest_driver_license', 'amount', 'return_date', 'return_time','company_name', 'company_email', 'company_phone'
@@ -107,6 +107,7 @@ def create_checkout_session(request):
                     'hotel_email':data['hotel_email'],
                     'hotel_location': data['hotel_location'],
                     'vehicle_id': data['vehicle_id'],
+                    'car_plate': data['car_plate'],
                     'guest_first_name': data['guest_first_name'],
                     'guest_last_name': data['guest_last_name'],
                     'guest_email': data['guest_email'],
@@ -140,7 +141,7 @@ def create_extension_checkout_session(request):
             data = json.loads(request.body)
             required_fields = [
                 'booking_id', 'hotel_name', 'hotel_id','hotelEmail', 'pickup_date', 'pickup_time',
-                'vehicle_id', 'guest_first_name', 'guest_last_name', 'guest_street_address','car_model','companyName',
+                'vehicle_id', 'guest_first_name', 'guest_last_name', 'guest_street_address','car_model', 'car_plate','companyName',
                 'companyEmail', 'companyPhone', 'hotelLocation',
                 'guest_email', 'guest_phone', 'guest_street_address','guest_postal_code','guest_city',
                 'amount', 'return_date', 'return_time'
@@ -201,6 +202,7 @@ def create_extension_checkout_session(request):
                     'company_email': data['companyEmail'],
                     'company_phone': data['companyPhone'],
                     'car_model': data['car_model'],
+                    'car_plate': data['car_plate'],
                     'hotel_location': data['hotelLocation'],
                     'vehicle_id': data['vehicle_id'],
                     'guest_first_name': data['guest_first_name'],

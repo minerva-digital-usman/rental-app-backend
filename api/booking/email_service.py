@@ -4,12 +4,30 @@ from django.conf import settings
 from middleware_platform.settings import BREVO_API_KEY, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, ADMIN_EMAIL
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
-
+from datetime import datetime
 from api.rental_company.utils.email_config import get_admin_email
 from api.rental_company.models import RentalCompany
 rental_company = RentalCompany.objects.first()
 
 class Email:
+   
+    def format_date(self, date_str):
+        try:
+            if not date_str:
+                return "N/A"
+                
+            # Parse the date string into a datetime object
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            
+            # Platform-independent way to remove leading zero from day
+            day = date_obj.day
+            month_year = date_obj.strftime("%B %Y")  # Full month name and year
+            
+            return f"{day} {month_year}"  # Format: "23 July 2025"
+        except Exception as e:
+            print(f"Error formatting date {date_str}: {str(e)}")
+            return date_str  # fallback to original if formatting fails
+        
     def __init__(self):
         # Configure API key
         self.configuration = sib_api_v3_sdk.Configuration()
@@ -45,8 +63,12 @@ class Email:
     
     def send_admin_booking_cancellation_email(self, metadata):
         """Notify admin team of a cancelled booking via Brevo"""
+        pickup_date = self.format_date(metadata.get('pickup_date', ''))
+        return_date = self.format_date(metadata.get('return_date', ''))
 
         subject = f"Admin Notification: Booking Cancelled – Ref #{metadata.get('booking_id', '')}"
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
 
         html_content = f"""
         <html>
@@ -61,12 +83,13 @@ class Email:
                     <tr><td><strong>Customer:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
                     <tr><td><strong>Email:</strong></td><td>{metadata.get('guest_email', 'N/A')}</td></tr>
                     <tr><td><strong>Phone:</strong></td><td>{metadata.get('guest_phone', 'N/A')}</td></tr>
-                    <tr><td><strong>Address:</strong></td><td>{metadata.get('guest_address', '')}</td></tr>
-                    <tr><td><strong>Hotel:</strong></td><td>{metadata.get('hotel_location', 'N/A')}</td></tr>
+                    <tr><td><strong>Address:</strong></td><td>{metadata.get('guest_address', '')}, {metadata.get('guest_postal_code', '')}, {metadata.get('guest_city', '')}</td></tr>
+                    <tr><td><strong>Hotel:</strong></td><td><a href="{map_link}">{hotel_location}</a></td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')}</td></tr>
-                    <tr><td><strong>Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')}</td></tr>
-                    <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount_paid', 'N/A')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                   <tr><td><strong>Pickup:</strong></td><td>{pickup_date} at {metadata.get('pickup_time', '')}</td></tr>
+<tr><td><strong>Return:</strong></td><td>{return_date} at {metadata.get('return_time', '')}</td></tr>
+ <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount_paid', 'N/A')}</td></tr>
                 </table>
 
 
@@ -90,7 +113,10 @@ class Email:
 
     def send_booking_cancellation_email(self, metadata):
         """Send booking cancellation confirmation email via Brevo"""
-
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
+        pickup_date = self.format_date(metadata.get('pickup_date', ''))
+        return_date = self.format_date(metadata.get('return_date', ''))
         subject = f"Booking Cancellation Confirmation – Reference #{metadata.get('booking_id', '')}"
 
         html_content = f"""
@@ -105,10 +131,11 @@ class Email:
                 <h3>Cancelled Booking Details</h3>
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
-                    <tr><td><strong>Driver:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_address', '')}</td></tr>
+                    <tr><td><strong>Driver:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_address', '')}, {metadata.get('guest_postal_code', '')}, {metadata.get('guest_city', '')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Original Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
-                    <tr><td><strong>Original Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                   <tr><td><strong>Pickup:</strong></td><td>{pickup_date} at {metadata.get('pickup_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
+                <tr><td><strong>Return:</strong></td><td>{return_date} at {metadata.get('return_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
                     <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount_paid', 'N/A')}</td></tr>
                 </table>
 
@@ -148,7 +175,8 @@ class Email:
             
     def send_hotel_notification_on_booking_cancellation_email(self, metadata):
         """Send hotel a notification email when a guest's car booking is cancelled"""
-
+        pickup_date = self.format_date(metadata.get('pickup_date', ''))
+        return_date = self.format_date(metadata.get('return_date', ''))
         subject = f"Notification: Guest Car Booking Cancellation – Ref #{metadata.get('booking_id', '')}"
 
         html_content = f"""
@@ -162,10 +190,11 @@ class Email:
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
                     <tr><td><strong>Guest Name:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
-                    <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_address', 'N/A')}</td></tr>
+                    <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_address', 'N/A')}, {metadata.get('guest_postal_code', '')}, {metadata.get('guest_city', '')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Original Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')}</td></tr>
-                    <tr><td><strong>Original Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                    <tr><td><strong>Original Pickup:</strong></td><td>{pickup_date} at {metadata.get('pickup_time', '')}</td></tr>
+                    <tr><td><strong>Original Return:</strong></td><td>{return_date} at {metadata.get('return_time', '')}</td></tr>
                     <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount_paid', 'N/A')}</td></tr>
                 </table>
 
@@ -193,7 +222,10 @@ class Email:
     
     def send_booking_confirmation_email_to_hotel(self, metadata):
         """Send booking confirmation email to hotel via Brevo"""
-
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
+        pickup_date = self.format_date(metadata.get('pickup_date', ''))
+        return_date = self.format_date(metadata.get('return_date', ''))
         subject = f"Guest Car Booking Confirmation - Reference #{metadata.get('booking_id', '')}"
 
         html_content = f"""
@@ -211,10 +243,11 @@ class Email:
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
                     <tr><td><strong>Guest Name:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
-                    <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_street_address', '')}</td></tr>
+                    <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_street_address', '')}, {metadata.get('guest_postal_code','')}, {metadata.get('guest_city','')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
-                    <tr><td><strong>Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                    <tr><td><strong>Pickup:</strong></td><td>{pickup_date} at {metadata.get('pickup_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
+                <tr><td><strong>Return:</strong></td><td>{return_date} at {metadata.get('return_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
                     <tr><td><strong>Total Amount (Guest Paid):</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
@@ -251,7 +284,10 @@ class Email:
     
     def send_booking_confirmation_email(self, metadata):
         """Send booking confirmation email via Brevo"""
-
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
+        pickup_date = self.format_date(metadata.get('pickup_date', ''))
+        return_date = self.format_date(metadata.get('return_date', ''))
         subject = f"Booking Confirmation: {metadata.get('company_name', 'Cora Mobility')} - Reference #{metadata.get('booking_id', '')}"
 
         html_content = f"""
@@ -268,14 +304,16 @@ class Email:
                 <h3>Rental Agreement Details</h3>
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
-                    <tr><td><strong>Driver:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_street_address', '')}</td></tr>
+                    <tr><td><strong>Driver:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_street_address', '')}, {metadata.get('guest_postal_code','')}, {metadata.get('guest_city','')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
-                    <tr><td><strong>Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                   <tr><td><strong>Pickup:</strong></td><td>{pickup_date} at {metadata.get('pickup_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
+                <tr><td><strong>Return:</strong></td><td>{return_date} at {metadata.get('return_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
+                   
                     <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
-                <p>Should you wish to extend or delete your booking, you can do so easily here: 
+                <p>Should you wish to extend or delete* your booking, you can do so easily here: 
                 <a href="{metadata.get('extension_link', '#')}">Booking Details</a>.</p>
 
                 <p>General rental terms and conditions apply: 
@@ -315,7 +353,10 @@ class Email:
 
     def send_booking_notification_to_admin(self, metadata):
         """Send booking confirmation notification email to admin via Brevo"""
-
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
+        pickup_date = self.format_date(metadata.get('pickup_date', ''))
+        return_date = self.format_date(metadata.get('return_date', ''))
         subject = f"New Guest Booking – Reference #{metadata.get('booking_id', '')}"
 
         html_content = f"""
@@ -329,11 +370,12 @@ class Email:
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
                     <tr><td><strong>Guest Name:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
-                    <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_street_address', 'N/A')}</td></tr>
+                    <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_street_address', 'N/A')}, {metadata.get('guest_postal_code','')}, {metadata.get('guest_city','')}</td></tr>
                     <tr><td><strong>Guest Email:</strong></td><td>{metadata.get('guest_email', 'N/A')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Pickup:</strong></td><td>{metadata.get('pickup_date', '')} at {metadata.get('pickup_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
-                    <tr><td><strong>Return:</strong></td><td>{metadata.get('return_date', '')} at {metadata.get('return_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                    <tr><td><strong>Pickup:</strong></td><td>{pickup_date} at {metadata.get('pickup_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
+                    <tr><td><strong>Return:</strong></td><td>{return_date} at {metadata.get('return_time', '')} – <a href="{map_link}">{hotel_location}</a></td></tr>
                     <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
@@ -367,7 +409,9 @@ class Email:
         
     def send_extension_email(self, metadata, new_end_time):
         """Send booking extension confirmation email via Brevo"""
-
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
+        return_date = self.format_date(metadata.get('original_return_date', ''))
         subject = f"Booking Extension Confirmation: {metadata.get('company_name', 'Cora Mobility')} - Reference #{metadata.get('booking_id', '')}"
 
         html_content = f"""
@@ -382,10 +426,11 @@ class Email:
                 <h3>Updated Rental Agreement Details</h3>
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
-                    <tr><td><strong>Driver:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_street_address', '')}</td></tr>
+                    <tr><td><strong>Driver:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_street_address', '')}, {metadata.get('guest_postal_code', '')}, {metadata.get('guest_city', '')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Original Return:</strong></td><td>{metadata.get('original_return_date', '')} at {metadata.get('original_return_time', '')} – {metadata.get('hotel_location', '')}</td></tr>
-                    <tr><td><strong>New Return:</strong></td><td>{new_end_time.strftime('%B %d, %Y at %H:%M')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                    <tr><td><strong>Original Return:</strong></td><td>{return_date} at {metadata.get('original_return_time', '')} – <a href="{map_link}">{hotel_location}</td></tr>
+                    <tr><td><strong>New Return:</strong></td><td>{new_end_time.strftime('%d %B %Y at %H:%M')} – <a href="{map_link}">{hotel_location}</td></tr>
                     <tr><td><strong>Total Amount:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
@@ -425,6 +470,7 @@ class Email:
             
     def send_extension_email_to_hotel(self, metadata, new_end_time):
         """Send booking extension notification email to the hotel via Brevo"""
+        return_date = self.format_date(metadata.get('original_return_date', ''))
 
         subject = f"Booking Extension Notification: Guest #{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')} – Ref #{metadata.get('booking_id', '')}"
 
@@ -438,11 +484,12 @@ class Email:
                 <h3>Guest Booking Extension Details</h3>
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
-                    <tr><td><strong>Guest:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
+                    <tr><td><strong>Guest:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}, {metadata.get('guest_street_address')}, {metadata.get('guest_postal_code', '')}, {metadata.get('guest_city', '')}</td></tr>
                     <tr><td><strong>Guest Contact:</strong></td><td>Email: {metadata.get('guest_email', 'N/A')} | Phone: {metadata.get('guest_phone', 'N/A')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
-                    <tr><td><strong>Original Return:</strong></td><td>{metadata.get('original_return_date', '')} at {metadata.get('original_return_time', '')}</td></tr>
-                    <tr><td><strong>New Return:</strong></td><td>{new_end_time.strftime('%B %d, %Y at %H:%M')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
+                    <tr><td><strong>Original Return:</strong></td><td>{return_date} at {metadata.get('original_return_time', '')}</td></tr>
+                    <tr><td><strong>New Return:</strong></td><td>{new_end_time.strftime('%d %B %Y at %H:%M')}</td></tr>
                     <tr><td><strong>Total Amount Charged:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
@@ -469,6 +516,9 @@ class Email:
 
     def send_extension_email_to_admin(self, metadata, new_end_time):
         """Send booking extension notification email to admin via Brevo"""
+        hotel_location = metadata.get('hotel_location', '')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
+        return_date = self.format_date(metadata.get('original_return_date', ''))
 
         subject = f"[ADMIN NOTICE] Booking Extension – Ref #{metadata.get('booking_id', '')} – Guest {metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}"
 
@@ -482,14 +532,15 @@ class Email:
                 <h3>Extended Booking Summary</h3>
                 <table style="border-collapse: collapse; width: 100%;">
                     <tr><td><strong>Booking Reference:</strong></td><td>{metadata.get('booking_id', 'N/A')}</td></tr>
-                    <tr><td><strong>Hotel:</strong></td><td>{metadata.get('hotel_location', '')}</td></tr>
+                    <tr><td><strong>Hotel:</strong></td><td><a href="{map_link}">{hotel_location}</td></tr>
                     <tr><td><strong>Hotel Email:</strong></td><td>{metadata.get('hotel_email', 'N/A')}</td></tr>
                     <tr><td><strong>Vehicle:</strong></td><td>{metadata.get('car_model', 'N/A')}</td></tr>
+                    <tr><td><strong>License Plate:</strong></td><td>{metadata.get('car_plate', 'N/A')}</td></tr>
                     <tr><td><strong>Guest Name:</strong></td><td>{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')}</td></tr>
                     <tr><td><strong>Guest Contact:</strong></td><td>Email: {metadata.get('guest_email', 'N/A')} | Phone: {metadata.get('guest_phone', 'N/A')}</td></tr>
                     <tr><td><strong>Guest Address:</strong></td><td>{metadata.get('guest_street_address', '')}, {metadata.get('guest_postal_code', '')} {metadata.get('guest_city', '')}</td></tr>
-                    <tr><td><strong>Original Return:</strong></td><td>{metadata.get('original_return_date', '')} at {metadata.get('original_return_time', '')}</td></tr>
-                    <tr><td><strong>New Return:</strong></td><td>{new_end_time.strftime('%B %d, %Y at %H:%M')}</td></tr>
+                    <tr><td><strong>Original Return:</strong></td><td>{return_date} at {metadata.get('original_return_time', '')}</td></tr>
+                    <tr><td><strong>New Return:</strong></td><td>{new_end_time.strftime('%d %B %Y at %H:%M')}</td></tr>
                       <tr><td><strong>Total Charged:</strong></td><td>CHF {metadata.get('amount', 'N/A')}</td></tr>
                 </table>
 
