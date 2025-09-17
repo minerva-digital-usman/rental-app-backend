@@ -154,6 +154,7 @@ def create_extension_checkout_session(request):
             description = (
                 f"Extension for Booking ID: {data['booking_id']}, "
                 f"Name: {data['guest_first_name']} {data['guest_last_name']}, "
+                f"Pickup: {data['pickup_date']} {data['pickup_time']}, "
                 f"New Return: {data['return_date']} {data['return_time']}"
                 # f"Car Model: {data['car_model']}, "
                 # f"Company: {data['companyName']}, {data['companyEmail']}, {data['companyPhone']}, "
@@ -363,14 +364,18 @@ def handle_initial_booking_payment(session, metadata):
     except Exception as e:
         print(f"Booking creation failed: {e}")
         raise
-
+    
 
 def handle_extension_payment(session, metadata):
     """Process booking extension payment after successful checkout"""
     booking_id = metadata['booking_id']
+    start_date = metadata.get('pickup_date')
+    start_time = metadata.get('pickup_time')
     return_date = metadata['return_date']
     return_time = metadata['return_time']
+    new_start_time = f"{start_date} {start_time}:00"  # e.g., "2025-06-09 09:00:00"
     new_end_time = f"{return_date} {return_time}:00"  # e.g., "2025-06-09 15:30:00"
+    print(f"New end time for extension: {new_start_time}")
 
 # Convert to datetime object
     try:
@@ -383,7 +388,9 @@ def handle_extension_payment(session, metadata):
         # 1. Update booking extension
         response = requests.patch(
             f'{settings.BASE_URL_BACKEND}/api/booking/{booking_id}/extend/',
-            json={"new_end_time": new_end_time},
+            json={
+                "new_start_time": new_start_time,
+                "new_end_time": new_end_time},
             headers={'Content-Type': 'application/json'}
         )
         response.raise_for_status()

@@ -115,26 +115,35 @@ class CancelBookingSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid booking ID format")
     
 class ExtendBookingSerializer(serializers.ModelSerializer):
-    new_end_time = serializers.DateTimeField(required=True)
+    new_start_time = serializers.DateTimeField(required=False)
+    new_end_time = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Booking
-        fields = ['new_end_time']
+        fields = ['new_start_time', 'new_end_time']
 
-    def validate_new_end_time(self, value):
-        booking = self.instance
-        actual_end_time = booking.end_time - timedelta(minutes=booking.buffer_time)
+    def validate(self, data):
+        # Ensure at least one field is provided
+        if not data.get('new_start_time') and not data.get('new_end_time'):
+            raise serializers.ValidationError("Provide at least a new_start_time or new_end_time")
 
-        if value <= actual_end_time:
-            raise serializers.ValidationError(
-                "New end time must be after current end time"
-            )
-        return value
+        # If both provided, validate logical order
+        new_start = data.get('new_start_time') or self.instance.start_time
+        new_end = data.get('new_end_time') or self.instance.end_time
+        if new_start >= new_end:
+            raise serializers.ValidationError("Start time must be before end time")
+
+        return data
 
     def update(self, instance, validated_data):
-        instance.end_time = validated_data['new_end_time']
+        if 'new_start_time' in validated_data:
+            instance.start_time = validated_data['new_start_time']
+        if 'new_end_time' in validated_data:
+            instance.end_time = validated_data['new_end_time']
         instance.save()
         return instance
+
+    
 class PriceCalculationSerializer(serializers.Serializer):
     vehicle = serializers.UUIDField()  # car ID
     start_time = serializers.DateTimeField()

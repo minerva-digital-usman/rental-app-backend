@@ -64,8 +64,8 @@ class ExtendBookingView(APIView):
     
     def patch(self, request, booking_id):
         """
-        Partially update a booking using booking ID (for time extension)
-        - If extension conflicts with other bookings, cancel those bookings
+        Partially update a booking using booking ID (for time extension or start time change)
+        - If extension/conflict conflicts with other bookings, cancel those bookings
         - Original booking gets priority
         - Send plain text cancellation emails to affected bookings
         """
@@ -76,85 +76,100 @@ class ExtendBookingView(APIView):
             if not serializer.is_valid():
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+            email_service = Email()  # Instantiate the Email class
+
+            # --------------------
+            # HANDLE END TIME CHANGE
+            # --------------------
             if 'new_end_time' in serializer.validated_data:
                 raw_new_end_time = serializer.validated_data['new_end_time']
                 actual_end_time = booking.end_time - timedelta(minutes=booking.buffer_time)
 
                 # Validate new end time is after current end time
-                if raw_new_end_time <= actual_end_time:
-                    return Response(
-                        {"detail": "New end time must be after current end time"},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                
+               
 
                 # Calculate buffered new end time for storage
                 buffered_new_end_time = raw_new_end_time + timedelta(minutes=booking.buffer_time)
 
-                # Send the extension email first before canceling conflicting bookings
-                email_service = Email()  # Instantiate the Email class
-                # email_service.send_extension_email(booking, raw_new_end_time)
+            else:
+                buffered_new_end_time = booking.end_time
 
-                # Find conflicting bookings
-                conflicting_bookings = Booking.objects.filter(
-                    vehicle_id=booking.vehicle_id,
-                    end_time__gt=booking.start_time,
-                    start_time__lt=buffered_new_end_time
-                ).exclude(id=booking.id)
+            # --------------------
+            # HANDLE START TIME CHANGE
+            # --------------------
+            if 'new_start_time' in serializer.validated_data:
+                raw_new_start_time = serializer.validated_data['new_start_time']
 
-                canceled_details = []
-                if conflicting_bookings.exists():
-                    for conflicting_booking in conflicting_bookings:
-                        # Skip cancelled bookings
-                        if conflicting_booking.status == Booking.STATUS_CANCELLED:
-                            continue
+                # Validate new start time is before current end time
+                if raw_new_start_time >= booking.end_time:
+                    return Response(
+                        {"detail": "New start time must be before current end time"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
-                        canceled_details.append({
-                            'id': str(conflicting_booking.id),
-                            'guest_email': conflicting_booking.guest.email,
-                            'start_time': conflicting_booking.start_time,
-                            'end_time': conflicting_booking.end_time
-                        })
-                       
-                        
+                booking.start_time = raw_new_start_time
 
-                        # Send plain text notification
-                        email_service.send_pending_conflict_email(conflicting_booking, booking, buffered_new_end_time)
+            # --------------------
+            # FIND CONFLICTING BOOKINGS
+            # --------------------
+            conflicting_bookings = Booking.objects.filter(
+                vehicle_id=booking.vehicle_id,
+                end_time__gt=booking.start_time,
+                start_time__lt=buffered_new_end_time
+            ).exclude(id=booking.id)
 
-                        # Mark as pending_conflict instead of deleting
-                        conflicting_booking.status = Booking.STATUS_PENDING_CONFLICT
-                        conflicting_booking.save()
+            canceled_details = []
+            if conflicting_bookings.exists():
+                for conflicting_booking in conflicting_bookings:
+                    if conflicting_booking.status == Booking.STATUS_CANCELLED:
+                        continue
 
-                        # ✅ Log conflict in BookingConflict table
-                        BookingConflict.objects.create(
-                            original_booking=booking,
-                            conflicting_booking=conflicting_booking,
-                            status=BookingConflict.STATUS_PENDING
-                        )
+                    canceled_details.append({
+                        'id': str(conflicting_booking.id),
+                        'guest_email': conflicting_booking.guest.email,
+                        'start_time': conflicting_booking.start_time,
+                        'end_time': conflicting_booking.end_time
+                    })
 
-                        # Send notifications
-                        email_service.notify_admin_of_pending_conflict(conflicting_booking, booking, buffered_new_end_time)
+                    # Send plain text notification
+                    email_service.send_pending_conflict_email(conflicting_booking, booking, buffered_new_end_time)
 
-                    # Update the original booking after cancellations
-                    booking.end_time = buffered_new_end_time
-                    booking.save()
+                    # Mark as pending_conflict
+                    conflicting_booking.status = Booking.STATUS_PENDING_CONFLICT
+                    conflicting_booking.save()
 
-                    return Response({
-                        "message": f"Booking extended successfully. {len(canceled_details)} conflicting bookings were canceled.",
-                        "canceled_bookings": canceled_details,
-                        "booking": BookingSerializer(booking).data
-                    }, status=status.HTTP_200_OK)
+                    # Log conflict
+                    BookingConflict.objects.create(
+                        original_booking=booking,
+                        conflicting_booking=conflicting_booking,
+                        status=BookingConflict.STATUS_PENDING
+                    )
 
-                # No conflicts - just update normally
+                    # Notify admin
+                    email_service.notify_admin_of_pending_conflict(conflicting_booking, booking, buffered_new_end_time)
+
+            # --------------------
+            # UPDATE ORIGINAL BOOKING
+            # --------------------
+            if 'new_end_time' in serializer.validated_data:
                 booking.end_time = buffered_new_end_time
-                booking.save()
-                return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
+            booking.save()
+
+            if canceled_details:
+                return Response({
+                    "message": f"Booking updated successfully. {len(canceled_details)} conflicting bookings were canceled.",
+                    "canceled_bookings": canceled_details,
+                    "booking": BookingSerializer(booking).data
+                }, status=status.HTTP_200_OK)
+
+            return Response(BookingSerializer(booking).data, status=status.HTTP_200_OK)
 
         except Booking.DoesNotExist:
             return Response(
                 {"detail": "Booking not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
 
             
 
@@ -166,23 +181,30 @@ class PriceCalculationView(APIView):
 
         if serializer.is_valid():
             vehicle_id = serializer.validated_data['vehicle']
-            original_end_time = serializer.validated_data.get('original_end_time')  # NEW
+            new_start_time = serializer.validated_data['start_time']
             new_end_time = serializer.validated_data['end_time']
+            original_end_time = serializer.validated_data.get('original_end_time')
+            original_start_time = serializer.validated_data.get('original_start_time')
 
             try:
                 car = Car.objects.get(id=vehicle_id)
             except Car.DoesNotExist:
                 return Response({"error": "Car not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # If extending, calculate ONLY the additional time (from original_end_time to new_end_time)
-            if original_end_time and original_end_time < new_end_time:
-                calculation_start = original_end_time
-                is_extension = True
+            # Determine calculation start
+            if original_start_time and original_end_time:
+                if new_start_time == original_start_time and new_end_time > original_end_time:
+                    # Extension only
+                    calculation_start = original_end_time
+                    is_extension = True
+                else:
+                    # Start time changed, calculate full new period
+                    calculation_start = new_start_time
+                    is_extension = False
             else:
-                calculation_start = serializer.validated_data['start_time']  # Default for new bookings
+                calculation_start = new_start_time
                 is_extension = False
 
-            # Calculate price ONLY for the extension period
             total_price = 0.0
             current_time = calculation_start
 
@@ -191,7 +213,7 @@ class PriceCalculationView(APIView):
                 hours_in_block = (block_end_time - current_time).total_seconds() / 3600
 
                 block_price = hours_in_block * car.price_per_hour
-                block_price = min(block_price, car.max_price_per_day)  # Apply daily cap
+                block_price = min(block_price, car.max_price_per_day)
                 total_price += block_price
                 current_time = block_end_time
 
@@ -200,10 +222,11 @@ class PriceCalculationView(APIView):
             return Response({
                 'total_price': round(total_price, 2),
                 'duration_hours': round(duration, 2),
-                'is_extension': is_extension,  # Tell frontend this is an extension
+                'is_extension': is_extension,
             }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 from pytz import timezone as pytz_timezone
 
