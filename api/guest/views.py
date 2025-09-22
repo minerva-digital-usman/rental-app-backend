@@ -8,9 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
-from api.guest.utils import is_driver_license_easyocr
-
-
+from api.guest.utils import is_driver_license_paddleocr
 
 
 class GuestViewSet(viewsets.ModelViewSet):
@@ -32,33 +30,31 @@ def upload_driver_license_temp(request):
             }, status=200)
 
         try:
-            # Read the image into memory once
+            # Read image into memory
             image_bytes = image.read()
             image_stream = BytesIO(image_bytes)
 
-            # OCR check and expiry date extraction
-            is_valid, expiry_date, is_expired = is_driver_license_easyocr(image_stream)
-            
+            # OCR validation
+            is_valid, expiry_date, is_expired = is_driver_license_paddleocr(image_stream)
+
             if not is_valid:
                 return JsonResponse({
                     'is_valid': False,
-                    'error': 'The uploaded image does not appear to be a valid driver\'s license. Please ensure the entire license is visible and try again.'
+                    'error': "The uploaded image does not appear to be a valid driver's license."
                 }, status=200)
 
-            # Reset stream for saving
+            # Save temp file
             image_stream.seek(0)
             filename = f"temp_driver_licenses/{uuid.uuid4()}.{ext}"
             path = default_storage.save(filename, ContentFile(image_stream.read()))
             temp_url = default_storage.url(path)
 
-            response_data = {
+            return JsonResponse({
                 'is_valid': True,
                 'Temp_path': temp_url,
                 'expiry_date': expiry_date if expiry_date else 'Expiry date not found',
                 'is_expired': is_expired if expiry_date else None
-            }
-
-            return JsonResponse(response_data)
+            })
 
         except Exception as e:
             return JsonResponse({
