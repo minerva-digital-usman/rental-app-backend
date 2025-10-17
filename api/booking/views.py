@@ -317,7 +317,6 @@ from pytz import timezone as pytz_timezone
 #         return Response({"detail": message})
 
 
-
 class CancelBookingAPIView(APIView):
     def post(self, request):
         serializer = CancelBookingSerializer(data=request.data)
@@ -329,18 +328,13 @@ class CancelBookingAPIView(APIView):
 
         rome_tz = pytz_timezone('Europe/Rome')
         start_time = booking.start_time
-
-        # Remove timezone info (make it naive)
         start_time_naive = start_time.replace(tzinfo=None)
-
-        # Localize naive datetime as Rome time WITHOUT changing the time
         start_time_rome = rome_tz.localize(start_time_naive)
-
         now = timezone.now().astimezone(rome_tz)
-        
+
         if now >= start_time_rome:
             return Response({"detail": "Cannot cancel a booking that has already started."}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         time_until_start = start_time - now
 
         # Determine refund policy
@@ -356,43 +350,41 @@ class CancelBookingAPIView(APIView):
             booking.save()
 
             try:
-                # Get ONLY initial payment for refund calculation
-                initial_payment = Payment.objects.filter(
+                # Get all succeeded payments (initial + extensions) - THIS IS CORRECT
+                payments = Payment.objects.filter(
                     booking_id=booking.id,
                     status='succeeded',
-                    payment_type='initial'  # Only refund initial payments
-                ).order_by('-created_at').first()
-
-                if not initial_payment:
-                    return Response({"detail": "No successful initial payment found for booking."}, status=status.HTTP_400_BAD_REQUEST)
-
-                # Check if payment intent is shared by other bookings
-                if Payment.objects.filter(
-                    stripe_payment_intent_id=initial_payment.stripe_payment_intent_id
-                ).exclude(booking_id=booking.id).exists():
-                    return Response({"detail": "Payment intent is shared by other bookings; aborting refund."}, status=status.HTTP_400_BAD_REQUEST)
-
-                # Refund logic for initial payment only
-                if refund_percentage > 0:
-                    refund_amount_cents = int(initial_payment.amount * refund_percentage * 100)
-                    stripe.Refund.create(
-                        payment_intent=initial_payment.stripe_payment_intent_id,
-                        amount=refund_amount_cents,
-                        reason='requested_by_customer'
-                    )
-                    initial_payment.status = 'refunded'
-                    initial_payment.save()
-
-                # Mark extension payments as cancelled (but don't refund them)
-                extension_payments = Payment.objects.filter(
-                    booking_id=booking.id,
-                    status='succeeded',
-                    payment_type='extension'
+                    payment_type__in=['initial', 'extension']  # This includes both!
                 )
-                
-                for ext_payment in extension_payments:
-                    ext_payment.status = 'cancelled'
-                    ext_payment.save()
+
+                if not payments.exists():
+                    return Response({"detail": "No successful payments found for booking."}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Check all payment intents for shared use
+                for p in payments:
+                    if Payment.objects.filter(
+                        stripe_payment_intent_id=p.stripe_payment_intent_id
+                    ).exclude(booking_id=booking.id).exists():
+                        return Response({"detail": "Payment intent shared by other bookings; aborting refund."}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Process refunds for ALL payments - THIS IS CORRECT
+                total_refunded = 0
+                if refund_percentage > 0:
+                    for p in payments:
+                        refund_amount_cents = int(p.amount * refund_percentage * 100)
+                        stripe.Refund.create(
+                            payment_intent=p.stripe_payment_intent_id,
+                            amount=refund_amount_cents,
+                            reason='requested_by_customer'
+                        )
+                        p.status = 'refunded'
+                        p.save()
+                        total_refunded += p.amount * refund_percentage
+                else:
+                    # Mark all as cancelled (no refund)
+                    for p in payments:
+                        p.status = 'cancelled'
+                        p.save()
 
                 # Notifications
                 email_service = Email()
@@ -406,11 +398,13 @@ class CancelBookingAPIView(APIView):
             except Exception as e:
                 return Response({"detail": f"Unexpected error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # Enhanced response message
+        payment_count = payments.count()
         if refund_percentage == Decimal('1.0'):
-            message = "Booking cancelled. Full refund issued for initial payment."
+            message = f"Booking cancelled. Full refund issued for {payment_count} payment(s) (initial + extensions)."
         elif refund_percentage == Decimal('0.5'):
-            message = "Booking cancelled. 50% refund issued for initial payment."
+            message = f"Booking cancelled. 50% refund issued for {payment_count} payment(s) (initial + extensions)."
         else:
-            message = "Booking cancelled. No refund as per policy."
+            message = f"Booking cancelled. No refund as per policy for {payment_count} payment(s)."
 
         return Response({"detail": message})
