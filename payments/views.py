@@ -366,6 +366,75 @@ def handle_initial_booking_payment(session, metadata):
         raise
     
 
+# def handle_extension_payment(session, metadata):
+#     """Process booking extension payment after successful checkout"""
+#     booking_id = metadata['booking_id']
+#     start_date = metadata.get('pickup_date')
+#     start_time = metadata.get('pickup_time')
+#     return_date = metadata['return_date']
+#     return_time = metadata['return_time']
+#     new_start_time = f"{start_date} {start_time}:00"  # e.g., "2025-06-09 09:00:00"
+#     new_end_time = f"{return_date} {return_time}:00"  # e.g., "2025-06-09 15:30:00"
+#     print(f"New end time for extension: {new_start_time}")
+
+# # Convert to datetime object
+#     try:
+#         raw_new_end_time = datetime.strptime(new_end_time, "%Y-%m-%d %H:%M:%S")
+#     except ValueError:
+#         logger.error("Invalid date/time format: %s", new_end_time)
+#         return Response({"detail": "Invalid date/time format."}, status=400)
+        
+#     try:
+#         # 1. Update booking extension
+#         response = requests.patch(
+#             f'{settings.BASE_URL_BACKEND}/api/booking/{booking_id}/extend/',
+#             json={
+#                 "new_start_time": new_start_time,
+#                 "new_end_time": new_end_time},
+#             headers={'Content-Type': 'application/json'}
+#         )
+#         response.raise_for_status()
+        
+#         booking = Booking.objects.get(id=booking_id)
+        
+#         # 2. Create payment record
+#         payment = Payment.objects.create(
+#             booking=booking,
+#             stripe_session_id=session['id'],
+#             amount=float(metadata['amount']),
+#             status='succeeded',
+#             payment_type='extension'
+#         )
+
+#         # 3. Retrieve and save the payment method if a new card was used
+#         if session.payment_intent:
+#             payment_intent = stripe.PaymentIntent.retrieve(session.payment_intent)
+#             payment.stripe_payment_intent_id = payment_intent.id
+            
+#             if payment_intent.payment_method:
+#                 payment_method = stripe.PaymentMethod.retrieve(payment_intent.payment_method)
+#                 payment.stripe_payment_method_id = payment_method.id
+#                 payment.payment_method_type = payment_method.type
+#                 if payment_method.type == 'card':
+#                     payment.payment_method_brand = payment_method.card.brand
+#                     payment.payment_method_last4 = payment_method.card.last4
+
+#         payment.save()
+#         extension_link = f"{settings.BASE_URL_FRONTEND}/extend-booking-email/{booking_id}"
+#         metadata['extension_link'] = extension_link
+
+#         # 4. Send extension confirmation email
+#         # send_extension_confirmation(booking, metadata)
+#         email_service = Email()
+#         email_service.send_extension_email(metadata, raw_new_end_time)
+#         email_service.send_extension_email_to_hotel(metadata, raw_new_end_time)
+#         email_service.send_extension_email_to_admin(metadata, raw_new_end_time)        
+        
+#     except Exception as e:
+#         print(f"Error processing extension for booking {booking_id}: {e}")
+#         raise
+
+
 def handle_extension_payment(session, metadata):
     """Process booking extension payment after successful checkout"""
     booking_id = metadata['booking_id']
@@ -373,11 +442,12 @@ def handle_extension_payment(session, metadata):
     start_time = metadata.get('pickup_time')
     return_date = metadata['return_date']
     return_time = metadata['return_time']
-    new_start_time = f"{start_date} {start_time}:00"  # e.g., "2025-06-09 09:00:00"
-    new_end_time = f"{return_date} {return_time}:00"  # e.g., "2025-06-09 15:30:00"
+    new_start_time = f"{start_date} {start_time}:00"
+    new_end_time = f"{return_date} {return_time}:00"
+    
     print(f"New end time for extension: {new_start_time}")
 
-# Convert to datetime object
+    # Convert to datetime object
     try:
         raw_new_end_time = datetime.strptime(new_end_time, "%Y-%m-%d %H:%M:%S")
     except ValueError:
@@ -397,13 +467,14 @@ def handle_extension_payment(session, metadata):
         
         booking = Booking.objects.get(id=booking_id)
         
-        # 2. Create payment record
+        # 2. Create payment record WITH CUSTOMER ID
         payment = Payment.objects.create(
             booking=booking,
             stripe_session_id=session['id'],
+            stripe_customer_id=session.get('customer'),  # ADD THIS LINE
             amount=float(metadata['amount']),
             status='succeeded',
-            payment_type='extension'
+            payment_type='extension'  # This is crucial for distinguishing
         )
 
         # 3. Retrieve and save the payment method if a new card was used
@@ -424,7 +495,6 @@ def handle_extension_payment(session, metadata):
         metadata['extension_link'] = extension_link
 
         # 4. Send extension confirmation email
-        # send_extension_confirmation(booking, metadata)
         email_service = Email()
         email_service.send_extension_email(metadata, raw_new_end_time)
         email_service.send_extension_email_to_hotel(metadata, raw_new_end_time)
