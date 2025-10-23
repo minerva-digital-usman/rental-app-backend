@@ -1,5 +1,4 @@
 from datetime import timedelta
-import datetime
 from requests import Response
 from rest_framework import viewsets
 from api.booking.models import Booking
@@ -175,6 +174,8 @@ class ExtendBookingView(APIView):
             
 
 
+
+from datetime import datetime, timedelta
 
 
 class PriceCalculationView(APIView):
