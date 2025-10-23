@@ -175,57 +175,45 @@ class ExtendBookingView(APIView):
 
 
 
-class PriceCalculationView(APIView):
-    def post(self, request, *args, **kwargs):
-        serializer = PriceCalculationSerializer(data=request.data)
+def _calculate_extension_with_original(self, car, original_start, original_end, new_end):
+    """
+    Calculate extension price considering hours already used in original booking,
+    respecting the daily (calendar-day) maximum rate.
+    """
+    total_extension_price = Decimal('0.0')
+    current_time = original_end
+    daily_totals = {}
 
-        if serializer.is_valid():
-            vehicle_id = serializer.validated_data['vehicle']
-            new_start_time = serializer.validated_data['start_time']
-            new_end_time = serializer.validated_data['end_time']
-            original_end_time = serializer.validated_data.get('original_end_time')
-            original_start_time = serializer.validated_data.get('original_start_time')
+    # Pre-fill already charged amounts per day from original booking
+    temp_time = original_start
+    while temp_time < original_end:
+        day = temp_time.date()
+        day_end = datetime.combine(day, datetime.max.time()).replace(tzinfo=temp_time.tzinfo)
+        block_end = min(day_end, original_end)
+        hours_in_day = Decimal((block_end - temp_time).total_seconds()) / Decimal(3600)
+        charge = min(hours_in_day * Decimal(car.price_per_hour), Decimal(car.max_price_per_day))
+        daily_totals[day] = min(daily_totals.get(day, Decimal('0.0')) + charge, Decimal(car.max_price_per_day))
+        temp_time = block_end
 
-            try:
-                car = Car.objects.get(id=vehicle_id)
-            except Car.DoesNotExist:
-                return Response({"error": "Car not found."}, status=status.HTTP_404_NOT_FOUND)
+    # Now calculate extension price day by day
+    while current_time < new_end:
+        day = current_time.date()
+        day_end = datetime.combine(day, datetime.max.time()).replace(tzinfo=current_time.tzinfo)
+        block_end_time = min(day_end, new_end)
+        hours_in_block = Decimal((block_end_time - current_time).total_seconds()) / Decimal(3600)
+        block_price = hours_in_block * Decimal(car.price_per_hour)
 
-            # Determine calculation start
-            if original_start_time and original_end_time:
-                if new_start_time == original_start_time and new_end_time > original_end_time:
-                    # Extension only
-                    calculation_start = original_end_time
-                    is_extension = True
-                else:
-                    # Start time changed, calculate full new period
-                    calculation_start = new_start_time
-                    is_extension = False
-            else:
-                calculation_start = new_start_time
-                is_extension = False
+        already_paid_today = daily_totals.get(day, Decimal('0.0'))
+        remaining_cap = max(Decimal(car.max_price_per_day) - already_paid_today, Decimal('0.0'))
+        charge_today = min(block_price, remaining_cap)
+        
+        total_extension_price += charge_today
+        daily_totals[day] = already_paid_today + charge_today
+        current_time = block_end_time
 
-            total_price = 0.0
-            current_time = calculation_start
+    return total_extension_price
 
-            while current_time < new_end_time:
-                block_end_time = min(current_time + timedelta(hours=24), new_end_time)
-                hours_in_block = (block_end_time - current_time).total_seconds() / 3600
 
-                block_price = hours_in_block * car.price_per_hour
-                block_price = min(block_price, car.max_price_per_day)
-                total_price += block_price
-                current_time = block_end_time
-
-            duration = (new_end_time - calculation_start).total_seconds() / 3600
-
-            return Response({
-                'total_price': round(total_price, 2),
-                'duration_hours': round(duration, 2),
-                'is_extension': is_extension,
-            }, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 from pytz import timezone as pytz_timezone
