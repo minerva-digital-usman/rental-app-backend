@@ -171,11 +171,9 @@ class ExtendBookingView(APIView):
             )
 
 
-            
-
-
-
 from datetime import datetime, timedelta
+    
+
 
 
 class PriceCalculationView(APIView):
@@ -196,21 +194,22 @@ class PriceCalculationView(APIView):
         except Car.DoesNotExist:
             return Response({"error": "Car not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Determine if this is an extension or new booking
+        # Debug logging
+        print(f"Calculation request: {start_time} to {end_time}")
+        print(f"Car: {car.id}, Hourly: {car.price_per_hour}, Daily Max: {car.max_price_per_day}")
+
         is_extension = bool(original_start_time and original_end_time)
         
         if is_extension:
-            # Extension calculation
-            total_price = self._calculate_extension_price(
-                car, original_start_time, original_end_time, end_time
-            )
+            total_price = self._calculate_extension_price(car, original_start_time, original_end_time, end_time)
             calculation_start = original_end_time
         else:
-            # New booking calculation
             total_price = self._calculate_new_booking_price(car, start_time, end_time)
             calculation_start = start_time
 
         duration_hours = (end_time - calculation_start).total_seconds() / 3600
+
+        print(f"Result: {total_price} for {duration_hours} hours")
 
         return Response({
             'total_price': float(total_price),
@@ -220,87 +219,36 @@ class PriceCalculationView(APIView):
 
     def _calculate_new_booking_price(self, car, start_time, end_time):
         """
-        Calculate price for new bookings with proper daily maximum
+        Calculate price for new bookings - SIMPLIFIED AND FIXED
         """
         total_price = Decimal('0.0')
         current_time = start_time
         
+        print(f"Calculating from {start_time} to {end_time}")
+        
         while current_time < end_time:
-            # Start of current calendar day
-            day_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            # Get the current day boundaries
+            day = current_time.date()
+            day_start = datetime(day.year, day.month, day.day, 0, 0, 0).replace(tzinfo=current_time.tzinfo)
             day_end = day_start + timedelta(days=1)
             
-            # Calculate hours in this day
+            # Calculate hours in this specific day
             block_end = min(day_end, end_time)
-            hours_in_day = Decimal((block_end - current_time).total_seconds()) / Decimal(3600)
+            hours_in_block = (block_end - current_time).total_seconds() / 3600
             
-            # Calculate price for this day
-            day_price = hours_in_day * Decimal(car.price_per_hour)
+            # Calculate potential price for this block
+            block_price = Decimal(hours_in_block) * Decimal(car.price_per_hour)
             
             # Apply daily maximum
-            if day_price > car.max_price_per_day:
-                day_price = Decimal(car.max_price_per_day)
+            daily_price = min(block_price, Decimal(car.max_price_per_day))
             
-            total_price += day_price
+            print(f"Day {day}: {hours_in_block} hours = {block_price} -> {daily_price} (max: {car.max_price_per_day})")
+            
+            total_price += daily_price
             current_time = block_end
             
+        print(f"Total price: {total_price}")
         return total_price
-
-    def _calculate_extension_price(self, car, original_start, original_end, new_end):
-        """
-        Calculate extension price considering hours already used
-        """
-        total_price = Decimal('0.0')
-        current_time = original_end
-        
-        # Calculate how much was already charged per day in original booking
-        daily_charges = self._calculate_daily_charges(car, original_start, original_end)
-        
-        while current_time < new_end:
-            day = current_time.date()
-            day_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
-            
-            block_end = min(day_end, new_end)
-            extension_hours = Decimal((block_end - current_time).total_seconds()) / Decimal(3600)
-            extension_price = extension_hours * Decimal(car.price_per_hour)
-            
-            # Check how much was already charged this day
-            already_charged = daily_charges.get(day, Decimal('0.0'))
-            remaining_capacity = max(Decimal(car.max_price_per_day) - already_charged, Decimal('0.0'))
-            
-            # Only charge up to remaining daily capacity
-            extension_price = min(extension_price, remaining_capacity)
-            total_price += extension_price
-            
-            current_time = block_end
-            
-        return total_price
-
-    def _calculate_daily_charges(self, car, start_time, end_time):
-        """
-        Calculate how much was charged per day in a time period
-        """
-        daily_charges = {}
-        current_time = start_time
-        
-        while current_time < end_time:
-            day = current_time.date()
-            day_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
-            
-            block_end = min(day_end, end_time)
-            hours_in_day = Decimal((block_end - current_time).total_seconds()) / Decimal(3600)
-            day_price = hours_in_day * Decimal(car.price_per_hour)
-            
-            # Apply daily maximum for this day
-            if day_price > car.max_price_per_day:
-                day_price = Decimal(car.max_price_per_day)
-            
-            daily_charges[day] = daily_charges.get(day, Decimal('0.0')) + day_price
-            current_time = block_end
-            
-        return daily_charges
 
 
 from pytz import timezone as pytz_timezone
