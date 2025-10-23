@@ -194,29 +194,43 @@ class PriceCalculationView(APIView):
             # Determine calculation start
             if original_start_time and original_end_time:
                 if new_start_time == original_start_time and new_end_time > original_end_time:
-                    # Extension only
-                    calculation_start = original_end_time
+                    # Extension only - FIXED CALCULATION
+                    total_price = self._calculate_extension_price(
+                        car, original_start_time, original_end_time, new_end_time
+                    )
                     is_extension = True
                 else:
                     # Start time changed, calculate full new period
                     calculation_start = new_start_time
                     is_extension = False
+                    total_price = 0.0
+                    current_time = calculation_start
+
+                    while current_time < new_end_time:
+                        block_end_time = min(current_time + timedelta(hours=24), new_end_time)
+                        hours_in_block = (block_end_time - current_time).total_seconds() / 3600
+
+                        block_price = hours_in_block * car.price_per_hour
+                        block_price = min(block_price, car.max_price_per_day)
+                        total_price += block_price
+                        current_time = block_end_time
             else:
+                # New booking
                 calculation_start = new_start_time
                 is_extension = False
+                total_price = 0.0
+                current_time = calculation_start
 
-            total_price = 0.0
-            current_time = calculation_start
+                while current_time < new_end_time:
+                    block_end_time = min(current_time + timedelta(hours=24), new_end_time)
+                    hours_in_block = (block_end_time - current_time).total_seconds() / 3600
 
-            while current_time < new_end_time:
-                block_end_time = min(current_time + timedelta(hours=24), new_end_time)
-                hours_in_block = (block_end_time - current_time).total_seconds() / 3600
+                    block_price = hours_in_block * car.price_per_hour
+                    block_price = min(block_price, car.max_price_per_day)
+                    total_price += block_price
+                    current_time = block_end_time
 
-                block_price = hours_in_block * car.price_per_hour
-                block_price = min(block_price, car.max_price_per_day)
-                total_price += block_price
-                current_time = block_end_time
-
+            calculation_start = original_end_time if is_extension else new_start_time
             duration = (new_end_time - calculation_start).total_seconds() / 3600
 
             return Response({
@@ -226,6 +240,52 @@ class PriceCalculationView(APIView):
             }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def _calculate_extension_price(self, car, original_start, original_end, new_end):
+        """
+        Calculate extension price considering hours already used AND PAID
+        in the original booking, ensuring daily cap consistency.
+        """
+        total_extension_price = 0.0
+        current_time = original_end
+
+        while current_time < new_end:
+            # Define the 24-hour billing period that current_time falls into
+            period_start = original_start + timedelta(
+                days=int((current_time - original_start).total_seconds() // (24 * 3600))
+            )
+            period_end = period_start + timedelta(hours=24)
+
+            # Determine hours already used (and paid) in this period
+            original_hours_in_period = 0.0
+            if original_end > period_start:
+                # Calculate overlap between original booking and this period
+                original_usage_start = max(original_start, period_start)
+                original_usage_end = min(original_end, period_end)
+                original_hours_in_period = max(
+                    0, (original_usage_end - original_usage_start).total_seconds() / 3600
+                )
+
+            # Already paid amount in this period
+            original_paid = min(
+                original_hours_in_period * car.price_per_hour,
+                car.max_price_per_day
+            )
+
+            # Calculate extension time in this period
+            extension_end = min(period_end, new_end)
+            extension_hours = (extension_end - current_time).total_seconds() / 3600
+            potential_extension_cost = extension_hours * car.price_per_hour
+
+            # Deduct already paid portion from daily cap
+            remaining_capacity = max(car.max_price_per_day - original_paid, 0)
+            payable_extension_cost = min(potential_extension_cost, remaining_capacity)
+
+            total_extension_price += payable_extension_cost
+            current_time = extension_end
+
+        return round(total_extension_price, 2)
+
 
 
 from pytz import timezone as pytz_timezone
