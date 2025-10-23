@@ -1,4 +1,5 @@
 from datetime import timedelta
+import datetime
 from requests import Response
 from rest_framework import viewsets
 from api.booking.models import Booking
@@ -175,13 +176,6 @@ class ExtendBookingView(APIView):
 
 
 
-from datetime import datetime, timedelta
-from decimal import Decimal
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from api.booking.serializers import PriceCalculationSerializer
-from api.garage.models import Car
 
 class PriceCalculationView(APIView):
     def post(self, request, *args, **kwargs):
