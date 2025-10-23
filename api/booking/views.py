@@ -243,41 +243,49 @@ class PriceCalculationView(APIView):
 
     def _calculate_extension_price(self, car, original_start, original_end, new_end):
         """
-        Calculate extension price considering hours already used AND PAID in original booking
+        Calculate extension price considering hours already used AND PAID
+        in the original booking, ensuring daily cap consistency.
         """
         total_extension_price = 0.0
         current_time = original_end
-        
+
         while current_time < new_end:
-            # Calculate the 24-hour period starting from original booking start
-            period_number = int((current_time - original_start).total_seconds() / (24 * 3600))
-            period_start = original_start + timedelta(hours=24 * period_number)
+            # Define the 24-hour billing period that current_time falls into
+            period_start = original_start + timedelta(
+                days=int((current_time - original_start).total_seconds() // (24 * 3600))
+            )
             period_end = period_start + timedelta(hours=24)
-            
-            # Calculate hours already used AND PAID in this period from original booking
-            original_hours_in_period = 0
+
+            # Determine hours already used (and paid) in this period
+            original_hours_in_period = 0.0
             if original_end > period_start:
-                original_usage_end = min(original_end, period_start + timedelta(hours=24))
-                original_hours_in_period = (original_usage_end - max(original_start, period_start)).total_seconds() / 3600
-            
-            # Calculate what was ALREADY PAID for original booking in this period
-            original_paid_in_period = original_hours_in_period * car.price_per_hour
-            # Apply daily cap to what was already paid (in case original booking hit the cap)
-            original_paid_in_period = min(original_paid_in_period, car.max_price_per_day)
-            
-            # Calculate extension hours in this period
+                # Calculate overlap between original booking and this period
+                original_usage_start = max(original_start, period_start)
+                original_usage_end = min(original_end, period_end)
+                original_hours_in_period = max(
+                    0, (original_usage_end - original_usage_start).total_seconds() / 3600
+                )
+
+            # Already paid amount in this period
+            original_paid = min(
+                original_hours_in_period * car.price_per_hour,
+                car.max_price_per_day
+            )
+
+            # Calculate extension time in this period
             extension_end = min(period_end, new_end)
             extension_hours = (extension_end - current_time).total_seconds() / 3600
-            extension_price_potential = extension_hours * car.price_per_hour
-            
-            # KEY FIX: Deduct what was ALREADY PAID from daily maximum
-            remaining_capacity = max(car.max_price_per_day - original_paid_in_period, 0)
-            extension_price = min(extension_price_potential, remaining_capacity)
-            
-            total_extension_price += extension_price
+            potential_extension_cost = extension_hours * car.price_per_hour
+
+            # Deduct already paid portion from daily cap
+            remaining_capacity = max(car.max_price_per_day - original_paid, 0)
+            payable_extension_cost = min(potential_extension_cost, remaining_capacity)
+
+            total_extension_price += payable_extension_cost
             current_time = extension_end
 
-        return total_extension_price
+        return round(total_extension_price, 2)
+
 
 
 from pytz import timezone as pytz_timezone
