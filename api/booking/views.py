@@ -243,53 +243,39 @@ class PriceCalculationView(APIView):
 
     def _calculate_extension_price(self, car, original_start, original_end, new_end):
         """
-        Calculate extension price considering hours already used in original booking
+        Calculate extension price considering hours already used AND PAID in original booking
         """
         total_extension_price = 0.0
+        current_time = original_end
         
-        # Calculate how many hours were used in each 24-hour period of original booking
-        original_hours_by_period = {}
-        current_original = original_start
-        
-        while current_original < original_end:
-            period_start = current_original
-            period_end = min(current_original + timedelta(hours=24), original_end)
-            hours_in_period = (period_end - period_start).total_seconds() / 3600
+        while current_time < new_end:
+            # Calculate the 24-hour period starting from original booking start
+            period_number = int((current_time - original_start).total_seconds() / (24 * 3600))
+            period_start = original_start + timedelta(hours=24 * period_number)
+            period_end = period_start + timedelta(hours=24)
             
-            # Store hours used in this period
-            period_key = period_start.strftime('%Y-%m-%d_%H')
-            original_hours_by_period[period_key] = hours_in_period
+            # Calculate hours already used AND PAID in this period from original booking
+            original_hours_in_period = 0
+            if original_end > period_start:
+                original_usage_end = min(original_end, period_start + timedelta(hours=24))
+                original_hours_in_period = (original_usage_end - max(original_start, period_start)).total_seconds() / 3600
             
-            current_original = period_end
-
-        # Now calculate extension price
-        current_extension = original_end
-        
-        while current_extension < new_end:
-            # Find which period this extension block belongs to
-            period_start = current_extension - timedelta(hours=24) if current_extension > original_start else original_start
-            period_key = period_start.strftime('%Y-%m-%d_%H')
+            # Calculate what was ALREADY PAID for original booking in this period
+            original_paid_in_period = original_hours_in_period * car.price_per_hour
+            # Apply daily cap to what was already paid (in case original booking hit the cap)
+            original_paid_in_period = min(original_paid_in_period, car.max_price_per_day)
             
-            # Calculate hours in this extension block
-            block_end_time = min(current_extension + timedelta(hours=24), new_end)
-            extension_hours = (block_end_time - current_extension).total_seconds() / 3600
+            # Calculate extension hours in this period
+            extension_end = min(period_end, new_end)
+            extension_hours = (extension_end - current_time).total_seconds() / 3600
+            extension_price_potential = extension_hours * car.price_per_hour
             
-            # Calculate how many hours were already used in this period from original booking
-            original_hours_in_period = original_hours_by_period.get(period_key, 0)
-            original_price_in_period = original_hours_in_period * car.price_per_hour
-            
-            # Calculate extension price for this period
-            extension_price = extension_hours * car.price_per_hour
-            
-            # Apply daily maximum considering original usage
-            total_period_price = original_price_in_period + extension_price
-            if total_period_price > car.max_price_per_day:
-                # Only charge up to the remaining daily capacity
-                remaining_capacity = max(car.max_price_per_day - original_price_in_period, 0)
-                extension_price = min(extension_price, remaining_capacity)
+            # KEY FIX: Deduct what was ALREADY PAID from daily maximum
+            remaining_capacity = max(car.max_price_per_day - original_paid_in_period, 0)
+            extension_price = min(extension_price_potential, remaining_capacity)
             
             total_extension_price += extension_price
-            current_extension = block_end_time
+            current_time = extension_end
 
         return total_extension_price
 
