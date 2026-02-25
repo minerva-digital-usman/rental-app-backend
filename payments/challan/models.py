@@ -100,7 +100,7 @@ class TrafficFine(models.Model):
             raise ValueError(error_msg)
 
     def send_fine_notification(self):
-        """Send traffic fine notification to guest and admin using Brevo"""
+        """Send traffic fine notification to guest and admin via SMTP"""
         guest = self.booking.guest
         subject = f"Traffic Fine Notification for Booking {self.booking.id}"
         admin_email = settings.ADMINS  # Add this in settings.py
@@ -144,12 +144,12 @@ class TrafficFine(models.Model):
 
         try:
             email_client = Email()
-            email_client._send_email_via_brevo(
+            email_client._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content_guest.strip(),
                 recipient_list=[guest.email]
             )
-            email_client._send_email_via_brevo(
+            email_client._send_email_via_aruba_smtp(
                 subject=f"[ADMIN] {subject}",
                 html_content=html_content_admin.strip(),
                 recipient_list=[admin_email]
@@ -200,12 +200,12 @@ class TrafficFine(models.Model):
 
         try:
             email_client = Email()
-            email_client._send_email_via_brevo(
+            email_client._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content_guest.strip(),
                 recipient_list=[guest.email]
             )
-            email_client._send_email_via_brevo(
+            email_client._send_email_via_aruba_smtp(
                 subject=f"[ADMIN] {subject}",
                 html_content=html_content_admin.strip(),
                 recipient_list=[admin_email]

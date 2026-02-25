@@ -26,7 +26,7 @@ class CustomAdminPasswordResetView(PasswordResetView):
                 reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
             )
 
-            # Send email using Brevo
+            # Send email using Aruba SMTP
             subject = "Admin Password Reset Request"
             html_content = f"""
             <html>
@@ -39,7 +39,7 @@ class CustomAdminPasswordResetView(PasswordResetView):
             </html>
             """
             email_client = Email()
-            email_client._send_email_via_brevo(
+            email_client._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content,
                 recipient_list=[admin_user.email]

@@ -3,9 +3,7 @@ from pyexpat.errors import messages
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.utils.html import strip_tags
-from middleware_platform.settings import BREVO_API_KEY, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, ADMIN_EMAIL
-import sib_api_v3_sdk
-from sib_api_v3_sdk.rest import ApiException
+from middleware_platform.settings import DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, ADMIN_EMAIL
 from datetime import datetime
 from api.rental_company.utils.email_config import get_admin_email
 from api.rental_company.models import RentalCompany
@@ -31,9 +29,7 @@ class Email:
             return date_str  # fallback to original if formatting fails
         
     def __init__(self):
-        # Configure API key
-        self.configuration = sib_api_v3_sdk.Configuration()
-        self.configuration.api_key['api-key'] = BREVO_API_KEY
+        pass
     
     def _send_email_via_aruba_smtp(self, subject, html_content, recipient_list, sender_name=None, sender_email=None):
         sender_name = sender_name or getattr(settings, "DEFAULT_FROM_NAME", "")
@@ -56,36 +52,10 @@ class Email:
             print(f"SMTP send failed: {e}")
             return False
     
-    def _send_email_via_aruba_smtp(self, subject, html_content, recipient_list, sender_name=None, sender_email=None):
-        """
-        Internal method to send email using Brevo API
-        """
-        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
-            sib_api_v3_sdk.ApiClient(self.configuration)
-        )
-        
-        sender_name = sender_name or DEFAULT_FROM_NAME
-        sender_email = sender_email or DEFAULT_FROM_EMAIL
-        
-        sender = {"name": sender_name, "email": sender_email}
-        to = [{"email": email} for email in recipient_list]
-        
-        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-            sender=sender,
-            to=to,
-            html_content=html_content,
-            subject=subject
-        )
-        
-        try:
-            api_response = api_instance.send_transac_email(send_smtp_email)
-            return api_response
-        except ApiException as e:
-            print(f"Exception when calling SMTPApi->send_transac_email: {e}\n")
-            return None
+
     
     def send_admin_booking_cancellation_email(self, metadata):
-        """Notify admin team of a cancelled booking via Brevo"""
+        """Notify admin team of a cancelled booking via SMTP"""
         pickup_date = self.format_date(metadata.get('pickup_date', ''))
         return_date = self.format_date(metadata.get('return_date', ''))
 
@@ -135,7 +105,7 @@ class Email:
             )
 
     def send_booking_cancellation_email(self, metadata):
-        """Send booking cancellation confirmation email via Brevo"""
+        """Send booking cancellation confirmation email via SMTP"""
         hotel_location = metadata.get('hotel_location', '')
         map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
         pickup_date = self.format_date(metadata.get('pickup_date', ''))
@@ -244,7 +214,7 @@ class Email:
 
     
     def send_booking_confirmation_email_to_hotel(self, metadata):
-        """Send booking confirmation email to hotel via Brevo"""
+        """Send booking confirmation email to hotel via SMTP"""
         hotel_location = metadata.get('hotel_location', '')
         map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
         pickup_date = self.format_date(metadata.get('pickup_date', ''))
@@ -306,7 +276,7 @@ class Email:
     
     
     def send_booking_confirmation_email(self, metadata):
-        """Send booking confirmation email via Brevo"""
+        """Send booking confirmation email via SMTP"""
         hotel_location = metadata.get('hotel_location', '')
         map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
         pickup_date = self.format_date(metadata.get('pickup_date', ''))
@@ -375,7 +345,7 @@ class Email:
     from django.conf import settings
 
     def send_booking_notification_to_admin(self, metadata):
-        """Send booking confirmation notification email to admin via Brevo"""
+        """Send booking confirmation notification email to admin via SMTP"""
         hotel_location = metadata.get('hotel_location', '')
         map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
         pickup_date = self.format_date(metadata.get('pickup_date', ''))
@@ -431,7 +401,7 @@ class Email:
         
         
     def send_extension_email(self, metadata, new_end_time):
-        """Send booking extension confirmation email via Brevo"""
+        """Send booking extension confirmation email via SMTP"""
         hotel_location = metadata.get('hotel_location', '')
         map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
         return_date = self.format_date(metadata.get('original_return_date', ''))
@@ -492,7 +462,7 @@ class Email:
             )
             
     def send_extension_email_to_hotel(self, metadata, new_end_time):
-        """Send booking extension notification email to the hotel via Brevo"""
+        """Send booking extension notification email to the hotel via SMTP"""
         return_date = self.format_date(metadata.get('original_return_date', ''))
 
         subject = f"Booking Extension Notification: Guest #{metadata.get('guest_first_name', '')} {metadata.get('guest_last_name', '')} – Ref #{metadata.get('booking_id', '')}"
@@ -538,7 +508,7 @@ class Email:
             )
 
     def send_extension_email_to_admin(self, metadata, new_end_time):
-        """Send booking extension notification email to admin via Brevo"""
+        """Send booking extension notification email to admin via SMTP"""
         hotel_location = metadata.get('hotel_location', '')
         map_link = f"https://www.google.com/maps/search/?api=1&query={hotel_location.replace(' ', '+')}" if hotel_location else "#"
         return_date = self.format_date(metadata.get('original_return_date', ''))

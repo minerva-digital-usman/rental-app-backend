@@ -121,14 +121,22 @@ JAZZMIN_SETTINGS = {
 
 
 
-# Brevo (Sendinblue) settings
-BREVO_API_KEY = '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'
+# Email settings
 DEFAULT_FROM_EMAIL = 'chatgpt6910@gmail.com'
 DEFAULT_FROM_NAME = 'Rental Platform'
 ADMIN_EMAIL = 'zeeshan6910@gmail.com'
 ADMINS = [('Admin', ADMIN_EMAIL)]
 
 import os
+
+
+EMAIL_BACKEND       = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST           = 'smtps.aruba.it'
+EMAIL_PORT           = 465
+EMAIL_USE_SSL        = True
+EMAIL_HOST_USER      = 'rental@mediadream.it'
+EMAIL_HOST_PASSWORD  = '00MediaDream00?'
+
 
 # URL for accessing media files in the browser
 MEDIA_URL = '/media/'
