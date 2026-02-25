@@ -1,0 +1,75 @@
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# ===============================
+# Django
+# ===============================
+*.log
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Django migrations (optional)
+# Uncomment if you DO NOT want migrations in git
+# */migrations/*
+# !*/migrations/__init__.py
+
+# ===============================
+# Environment variables
+# ===============================
+.env
+.env.*
+!.env.example
+
+# ===============================
+# VS Code
+# ===============================
+.vscode/
+
+# ===============================
+# PyCharm
+# ===============================
+.idea/
+
+# ===============================
+# OS files
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# Coverage / Testing
+# ===============================
+htmlcov/
+.coverage
+coverage.xml
+.pytest_cache/
+
+# ===============================
+# Build / Distribution
+# ===============================
+build/
+dist/
+*.egg-info/
+
+# ===============================
+# Docker
+# ===============================
+*.pid
+*.sock
+
+# ===============================
+# Node (if frontend inside project)
+# ===============================
+node_modules/

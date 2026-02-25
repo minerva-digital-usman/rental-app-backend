@@ -1,6 +1,8 @@
 from datetime import timedelta
 from pyexpat.errors import messages
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.utils.html import strip_tags
 from middleware_platform.settings import BREVO_API_KEY, DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, ADMIN_EMAIL
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -33,7 +35,28 @@ class Email:
         self.configuration = sib_api_v3_sdk.Configuration()
         self.configuration.api_key['api-key'] = BREVO_API_KEY
     
-    def _send_email_via_brevo(self, subject, html_content, recipient_list, sender_name=None, sender_email=None):
+    def _send_email_via_aruba_smtp(self, subject, html_content, recipient_list, sender_name=None, sender_email=None):
+        sender_name = sender_name or getattr(settings, "DEFAULT_FROM_NAME", "")
+        sender_email = sender_email or settings.DEFAULT_FROM_EMAIL
+
+        from_email = f"{sender_name} <{sender_email}>" if sender_name else sender_email
+        text_content = strip_tags(html_content or "")
+
+        try:
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=text_content,
+                from_email=from_email,
+                to=recipient_list,
+            )
+            msg.attach_alternative(html_content, "text/html")
+            msg.send(fail_silently=False)
+            return True
+        except Exception as e:
+            print(f"SMTP send failed: {e}")
+            return False
+    
+    def _send_email_via_aruba_smtp(self, subject, html_content, recipient_list, sender_name=None, sender_email=None):
         """
         Internal method to send email using Brevo API
         """
@@ -105,7 +128,7 @@ class Email:
 
         admin_email = metadata.get('company_email')
         if admin_email:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[admin_email]
@@ -165,7 +188,7 @@ class Email:
 
         recipient = metadata.get('guest_email')
         if recipient:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[recipient]
@@ -213,7 +236,7 @@ class Email:
 
         hotel_email = metadata.get('hotel_email')
         if hotel_email:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[hotel_email]
@@ -269,7 +292,7 @@ class Email:
 
         hotel_email = metadata.get('hotel_email')
         if hotel_email:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[hotel_email]
@@ -342,7 +365,7 @@ class Email:
 
         recipient = metadata.get('guest_email')
         if recipient:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[recipient]
@@ -395,7 +418,7 @@ class Email:
 
         recipient_list = [admin_email]
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content.strip(),
             recipient_list=recipient_list
@@ -462,7 +485,7 @@ class Email:
 
         recipient = metadata.get('guest_email')
         if recipient:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[recipient]
@@ -508,7 +531,7 @@ class Email:
 
         hotel_email = metadata.get('hotel_email')
         if hotel_email:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[hotel_email]
@@ -562,7 +585,7 @@ class Email:
 
         admin_email = get_admin_email()  # You can hardcode or fetch from config
         if admin_email:
-            return self._send_email_via_brevo(
+            return self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=html_content.strip(),
                 recipient_list=[admin_email]
@@ -610,7 +633,7 @@ class Email:
         if hotel_email:
             recipient_list.append(hotel_email)
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content.strip(),
             recipient_list=recipient_list
@@ -645,7 +668,7 @@ class Email:
     #     </html>
     #     """
 
-    #     return self._send_email_via_brevo(
+    #     return self._send_email_via_aruba_smtp(
     #         subject=subject,
     #         html_content=html_content,
     #         recipient_list=[booking.guest.email]
@@ -680,7 +703,7 @@ class Email:
         </html>
         """
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content,
             recipient_list=[pending_booking.guest.email]
@@ -763,7 +786,7 @@ class Email:
         # Send to Admin
         admin_email = get_admin_email()
         if admin_email:
-            self._send_email_via_brevo(
+            self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=generate_admin_html().strip(),
                 recipient_list=[admin_email]
@@ -772,7 +795,7 @@ class Email:
         # Send to Hotel (if available)
         hotel_email = getattr(pending_booking.hotel, 'email', None)
         if hotel_email:
-            self._send_email_via_brevo(
+            self._send_email_via_aruba_smtp(
                 subject=subject,
                 html_content=generate_hotel_html().strip(),
                 recipient_list=[hotel_email]
@@ -816,7 +839,7 @@ class Email:
         </html>
         """
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content.strip(),
             recipient_list=[booking.guest.email]
@@ -850,7 +873,7 @@ class Email:
         if hotel_email:
             recipient_list.append(hotel_email)
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content.strip(),
             recipient_list=recipient_list
@@ -879,7 +902,7 @@ class Email:
         if guest_email:
             recipient_list.append(guest_email)
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content.strip(),
             recipient_list=recipient_list
@@ -925,7 +948,7 @@ class Email:
         </html>
         """
 
-        return self._send_email_via_brevo(
+        return self._send_email_via_aruba_smtp(
             subject=subject,
             html_content=html_content.strip(),
             recipient_list=[canceled_booking.guest.email]
