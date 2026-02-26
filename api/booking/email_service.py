@@ -7,10 +7,21 @@ from middleware_platform.settings import DEFAULT_FROM_EMAIL, DEFAULT_FROM_NAME, 
 from datetime import datetime
 from api.rental_company.utils.email_config import get_admin_email
 from api.rental_company.models import RentalCompany
-rental_company = RentalCompany.objects.first()
+
+
+def _get_rental_company():
+    """Lazy-load the rental company to avoid DB queries at import time."""
+    return RentalCompany.objects.first()
+
 
 class Email:
    
+    @property
+    def rental_company(self):
+        if not hasattr(self, '_rental_company'):
+            self._rental_company = _get_rental_company()
+        return self._rental_company
+
     def format_date(self, date_str):
         try:
             if not date_str:
@@ -665,9 +676,9 @@ class Email:
                 <p>Thank you for your patience and understanding.</p>
         
                 <p>Best regards,<br>
-                <strong>{rental_company.name}</strong><br>
-                Phone: {rental_company.phone_number}<br>
-                Email: {rental_company.email}</p>
+                <strong>{self.rental_company.name}</strong><br>
+                Phone: {self.rental_company.phone_number}<br>
+                Email: {self.rental_company.email}</p>
                 </p>
             </body>
         </html>
@@ -715,9 +726,9 @@ class Email:
                     <p>Please review the conflict and take necessary action if required.</p>
 
                     <p>Regards,<br>
-                    <strong>{rental_company.name} Operations</strong><br>
-                    Email: {rental_company.email}<br>
-                    Phone: {rental_company.phone_number}</p>
+                    <strong>{self.rental_company.name} Operations</strong><br>
+                    Email: {self.rental_company.email}<br>
+                    Phone: {self.rental_company.phone_number}</p>
 
                     <hr>
                     <p><small>This is an internal system alert. Please do not forward without review.</small></p>
@@ -743,9 +754,9 @@ class Email:
                     <p>No immediate action is required on your part, but feel free to reach out if clarification is needed.</p>
 
                     <p>Regards,<br>
-                    <strong>{rental_company.name} Operations</strong><br>
-                    Email: {rental_company.email}<br>
-                    Phone: {rental_company.phone_number}</p>
+                    <strong>{self.rental_company.name} Operations</strong><br>
+                    Email: {self.rental_company.email}<br>
+                    Phone: {self.rental_company.phone_number}</p>
 
                     <hr>
                     <p><small>This message was sent to notify you of a vehicle scheduling issue. For internal reference only.</small></p>
@@ -799,9 +810,9 @@ class Email:
                 <p>Thank you for your patience and understanding.</p>
 
                 <p>Warm regards,<br>
-                <strong>{rental_company.name} Support Team</strong><br>
-                Email: {rental_company.email}<br>
-                Phone: {rental_company.phone_number}</p>
+                <strong>{self.rental_company.name} Support Team</strong><br>
+                Email: {self.rental_company.email}<br>
+                Phone: {self.rental_company.phone_number}</p>
 
                 <hr>
                 <p><small>This is a confirmation that your booking is now valid and free of conflicts. No further action is required.</small></p>
@@ -908,9 +919,9 @@ class Email:
                 <p>Thank you for your understanding.</p>
 
                 <p>Warm regards,<br>
-                <strong>{rental_company.name} Booking Team</strong><br>
-                Email: {rental_company.email}<br>
-                Phone: {rental_company.phone_number}</p>
+                <strong>{self.rental_company.name} Booking Team</strong><br>
+                Email: {self.rental_company.email}<br>
+                Phone: {self.rental_company.phone_number}</p>
 
                 <hr>
                 <p><small>This cancellation was triggered automatically by our scheduling system based on availability conflicts. No further action is required unless you wish to rebook.</small></p>

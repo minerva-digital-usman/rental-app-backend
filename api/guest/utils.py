@@ -8,8 +8,14 @@ from datetime import datetime
 
 
 
-# Create the EasyOCR reader (reuse it for performance)
-reader = easyocr.Reader(['en', 'de', 'fr', 'it'], gpu=False)  # Set gpu=True if you have a CUDA GPU
+# Lazy-load the EasyOCR reader (reuse it for performance)
+_reader = None
+
+def get_reader():
+    global _reader
+    if _reader is None:
+        _reader = easyocr.Reader(['en', 'de', 'fr', 'it'], gpu=False)
+    return _reader
 def extract_expiry_date(text: str) -> Optional[str]:
     # First try to find Italian license format with 4a and 4b markers
     italian_pattern = r"4a\.\s*(\d{2}/\d{2}/\d{4}).*?4b\.\s*(\d{2}/\d{2}/\d{4})"
@@ -75,7 +81,7 @@ def is_driver_license_expired(expiry_date: str) -> Tuple[bool, Optional[datetime
 def is_driver_license_easyocr(image_stream) -> Tuple[bool, Optional[str], Optional[bool]]:
     image = Image.open(image_stream)
     image_np = np.array(image)
-    results = reader.readtext(image_np, detail=0)
+    results = get_reader().readtext(image_np, detail=0)
     text = " ".join(results)
     print("EasyOCR text:", text)
     

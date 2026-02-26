@@ -12,48 +12,37 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables: .env.prod takes priority, falls back to .env.local
+env_prod = BASE_DIR / '.env.prod'
+env_local = BASE_DIR / '.env.local'
+
+if env_prod.exists():
+    load_dotenv(env_prod)
+elif env_local.exists():
+    load_dotenv(env_local)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-i6khrkioubhlq5x=fqcz0i7y3kowbg3_y-07ard_*5-0h0!_6='
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-key-change-me')
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
-# STRIPE_SECRET_KEY = 'sk_test_51REXBZIpkMgm9AXd3PAkWm1K9cNMftuYBDkoPsnNorDv8hUfldb0XDE1BEoamNzUEMhGSQ22JIUerkOTKYBUyOnw00syRm0uQE'
-# STRIPE_PUBLIC_KEY = 'pk_test_51REXBZIpkMgm9AXd10Wr8V2dZqE0FgNXyn8ow7KDMr2lLizFHHyKgE5mUab5QBx9zTfb40Kd1vczMZKpb7gdvCTw003jH7RCPY'
-# STRIPE_WEBHOOK_SECRET = 'whsec_Xj3zKkb5RYiC0eAtz182nHuhP4nKl63Y'
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 
-STRIPE_SECRET_KEY = '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'
-STRIPE_PUBLIC_KEY = 'pk_live_51PYSvEEnYPvPlTQ0GCq7AxgsRm9x7XNkXB7dZH8Kev5fQhSoTGF8kCofBF83gTdE6L2dCopZ8YS4QvuILChCsI8K00tUHqHo3z'
-STRIPE_WEBHOOK_SECRET = 'whsec_0E6h0Bh8jZYohFg9Jip0Zlouc794qUeT'
+BASE_URL_FRONTEND = os.getenv('BASE_URL_FRONTEND', 'http://localhost:5173')
+BASE_URL_BACKEND = os.getenv('BASE_URL_BACKEND', 'http://localhost:8000')
 
-
-BASE_URL_FRONTEND = "https://rental.mdlabs.it"
-BASE_URL_BACKEND = "https://api.mdlabs.it"
-
-# ALLOWED_HOSTS = ['*']
-# ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app', ]
-
-ALLOWED_HOSTS = [
-    "mdlabs.it",
-    "www.mdlabs.it",
-    "127.0.0.1:8000",
-    "localhost:5173",
-    "127.0.0.1",
-    "159.223.221.86:8000",
-    "159.223.221.86:5173",
-    "api.mdlabs.it",
-    "159.223.221.86",
-    "rental.mdlabs.it",
-    "a62e-2001-b07-6464-ee3e-20f5-c433-9859-da79.ngrok-free.app"
-]
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Application definition
 
@@ -122,20 +111,18 @@ JAZZMIN_SETTINGS = {
 
 
 # Email settings
-DEFAULT_FROM_EMAIL = 'chatgpt6910@gmail.com'
-DEFAULT_FROM_NAME = 'Rental Platform'
-ADMIN_EMAIL = 'zeeshan6910@gmail.com'
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+DEFAULT_FROM_NAME = os.getenv('DEFAULT_FROM_NAME', 'Rental Platform')
+ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', '')
 ADMINS = [('Admin', ADMIN_EMAIL)]
-
-import os
 
 
 EMAIL_BACKEND       = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST           = 'smtps.aruba.it'
-EMAIL_PORT           = 465
-EMAIL_USE_SSL        = True
-EMAIL_HOST_USER      = 'rental@mediadream.it'
-EMAIL_HOST_PASSWORD  = '00MediaDream00?'
+EMAIL_HOST           = os.getenv('EMAIL_HOST', 'smtps.aruba.it')
+EMAIL_PORT           = int(os.getenv('EMAIL_PORT', '465'))
+EMAIL_USE_SSL        = os.getenv('EMAIL_USE_SSL', 'True').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER      = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD  = os.getenv('EMAIL_HOST_PASSWORD', '')
 
 
 # URL for accessing media files in the browser
@@ -188,12 +175,12 @@ if DEBUG:
 else:
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": "project",
-            "USER": "postgres",
-            "PASSWORD": "221299",
-            "HOST": "localhost",
-            "PORT": "5432",
+            "ENGINE": os.getenv('DB_ENGINE', 'django.db.backends.postgresql_psycopg2'),
+            "NAME": os.getenv('DB_NAME', 'project'),
+            "USER": os.getenv('DB_USER', 'postgres'),
+            "PASSWORD": os.getenv('DB_PASSWORD', ''),
+            "HOST": os.getenv('DB_HOST', 'localhost'),
+            "PORT": os.getenv('DB_PORT', '5432'),
         }
     }
 
